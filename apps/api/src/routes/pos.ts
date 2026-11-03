@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { type Deps, requirePosToken, tenantTx } from '../app.ts';
-import { authoriseAction, can, requireBranchAccess, requirePermission } from '../lib/authz.ts';
+import { LIMITS, PERMISSIONS } from '@retail/shared';
+import { authoriseAction, can, requireBranchAccess, requirePermission, verifyApprover } from '../lib/authz.ts';
 import { conflict, forbidden, notFound } from '../lib/errors.ts';
 import { enqueueEvent } from '../lib/outbox.ts';
 import { postMovements } from '../lib/stock.ts';
@@ -11,6 +12,25 @@ import { computeZReport } from '../services/zreport.ts';
 const approval = z.object({ approver_staff_id: uuid, approver_pin: z.string().regex(/^\d{4,8}$/) }).nullish();
 
 export async function posRoutes(app: FastifyInstance, deps: Deps) {
+  // The till asks a manager to approve an over-limit action (discount, refund,
+  // void...) while it is online: checks the approver's PIN and authority. The
+  // approval itself travels with the sale/refund in /v1/sync/push. Offline the
+  // till records the approval without this check (the sync rules still apply).
+  app.post('/v1/pos/verify-approval', async (req) => {
+    const pos = requirePosToken(req);
+    const body = parse(z.object({
+      action_code: z.enum(PERMISSIONS), limit_code: z.enum(LIMITS).optional(), value: z.number().nonnegative().default(0),
+      approver_staff_id: uuid, approver_pin: z.string().regex(/^\d{4,8}$/),
+    }), req.body);
+    return tenantTx(deps, req, async ({ tx, actor }) => {
+      const approver = await verifyApprover(tx, { actor, actionCode: body.action_code, limitCode: body.limit_code, value: body.value,
+        approval: { approver_staff_id: body.approver_staff_id, approver_pin: body.approver_pin } });
+      if (!approver.isOwner && !approver.branchIds.has(pos.bid)) throw forbidden('The approver does not work at this branch');
+      const [s] = await tx<{ display_name: string }[]>`SELECT display_name FROM staff WHERE id = ${approver.staffId}`;
+      return { approved_by: approver.staffId, display_name: s?.display_name ?? null, outcome: 'approved' as const };
+    });
+  });
+
   // Open a till (start of shift). The device may supply the id (offline-safe).
   app.post('/v1/till-sessions', async (req, reply) => {
     const body = parse(z.object({ id: uuid.optional(), till_id: uuid, opening_float_pence: pence.default(0) }), req.body);

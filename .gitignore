@@ -6,3 +6,6 @@ coverage/
 !.env.example
 *.log
 .claude/worktrees/
+.expo/
+expo-env.d.ts
+web-build/

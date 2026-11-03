@@ -193,7 +193,22 @@ apps/api/src/
   integrations/       OCR (Claude), file store, adapter interfaces + mocks
   worker/             outbox publisher, notifications, daily summaries
 apps/api/test/        integration tests against a real, fresh PostgreSQL
+apps/api/scripts/seed-demo.ts   demo UK corner shop (prints login, PINs, till pairing code)
+apps/web/             Next.js back-office (owners/managers). Token in httpOnly cookie;
+                      browser calls /api/proxy/* which adds the Bearer token server-side.
+apps/pos/             Expo (React Native) till & staff app, also runs on web. Offline queue
+                      (SQLite native / localStorage web), pure logic in src/logic (unit tested).
 ```
+
+## Frontend conventions
+
+- Product name **Counter**. Tokens: brand `#0B6E69`, ink `#0F172A`, accent `#F2A900`
+  (never on data marks or text), success/warning/danger reserved for status.
+- GOV.UK-style focus ring (yellow `#FFDD00` + dark edge); WCAG 2.2 AA; status never colour-only.
+- Always format with `@retail/shared` (`formatGBP`, `formatDateUK`, `VAT_LABELS`) — en-GB, Europe/London.
+- Plain-English, GOV.UK-style copy and error messages ("Enter a real UK postcode, like M14 6LE").
+- The till builds sales ONLY with `buildSalePayload()`; never re-implement sale arithmetic.
+- React is pinned to exactly 19.0.0 across web and pos (one copy in the workspace).
 
 ## Commands
 
@@ -203,7 +218,8 @@ ADMIN_URL=postgres://postgres@localhost/postgres DB_NAME=retail ./db/setup-dev.s
 DATABASE_URL=postgres://localhost/retail ./db/migrate.sh        # apply pending migrations
 psql postgres://localhost/retail -f db/tests/smoke_test.sql   # as superuser, fresh DB
 npm run typecheck && npm test                                  # TEST_ADMIN_URL = superuser URL
-npm run dev / npm run worker
+npm run seed:demo          # needs DATABASE_URL / WORKER_DATABASE_URL
+npm run dev / npm run worker / npm run web (:3001) / npm run pos (Expo web)
 ```
 
 ## API conventions (decided — keep consistent)
@@ -233,11 +249,14 @@ npm run dev / npm run worker
 
 ## Status
 
-Built: Phase 1 core API and most of Phase 2 (purchasing, OCR invoices, low stock, expiry,
-labels table only). Not built yet: web back-office (Next.js), POS/staff app (Expo + SQLite),
-promotions engine on the device (promotions are synced, not applied server-side), HR/tasks/
-quizzes (Phase 3), forecasts/insights/NL Q&A (Phase 4), real channel/accounting/payment adapters
-(Phase 5), S3 file store, real email provider, rate limiting on PIN login.
+Built: Phase 1 core API, most of Phase 2 (purchasing, OCR invoices, low stock, expiry), the web
+back-office and the POS till app (sell, PMP, Challenge 25, approvals, cash/card, refunds,
+cash-up, training mode, offline queue + sync issues, staff requests).
+Not built yet: promotions engine (synced, not applied), camera scanning, unreceipted refunds
+on the till, price-level switching on the till, real card terminal / receipt printer, customers,
+HR/tasks/quizzes (Phase 3), forecasts/insights/NL Q&A (Phase 4), real channel/accounting/payment
+adapters and HMRC submission (Phase 5), S3 file store, real email provider, rate limiting on
+PIN login and /v1/pos/verify-approval. Native iOS/Android only bundle-checked, not device-tested.
 
 ## Scaling notes (later, not now)
 

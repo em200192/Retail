@@ -75,6 +75,33 @@ export interface ApprovalInput {
 }
 
 /**
+ * Checks a manager's PIN approval of someone else's action: right PIN, holds
+ * pos.approve + the action permission, not approving themselves, and within
+ * their OWN explicit cap. Returns the approver. Records nothing.
+ */
+export async function verifyApprover(
+  tx: Tx,
+  opts: { actor: Actor; actionCode: Permission; limitCode?: LimitCode; value: number; approval: ApprovalInput },
+): Promise<Actor> {
+  if (opts.approval.approver_staff_id === opts.actor.staffId) throw forbidden('You cannot approve your own action');
+  const [approver] = await tx<{ pos_pin_hash: string | null }[]>`
+    SELECT pos_pin_hash FROM staff WHERE id = ${opts.approval.approver_staff_id} AND status = 'active'`;
+  if (!approver || !(await verifySecret(opts.approval.approver_pin, approver.pos_pin_hash))) {
+    throw forbidden('Approval PIN is incorrect');
+  }
+  const approverActor = await loadActor(tx, opts.approval.approver_staff_id);
+  requirePermission(approverActor, 'pos.approve', opts.actionCode);
+  // An approver is bound by their OWN explicit cap (e.g. a manager's £200
+  // refund limit). Per-shift counters describe the requester, not the approver.
+  const approverCap = opts.limitCode && !opts.limitCode.endsWith('.max_per_shift')
+    ? approverActor.limits.get(opts.limitCode) : undefined;
+  if (!approverActor.isOwner && approverCap !== undefined && opts.value > approverCap) {
+    throw forbidden('This is also over the approver\'s limit');
+  }
+  return approverActor;
+}
+
+/**
  * Online manager approval (back office / till while connected): verifies the
  * approver's PIN and that they may approve, records a pos_approvals row and
  * returns its id. Within-limit actions are recorded as 'self_authorised'.
@@ -103,21 +130,7 @@ export async function authoriseAction(
         needs_approval: true, action: opts.actionCode, limit: opts.limitCode, value: opts.value,
       });
     }
-    if (opts.approval.approver_staff_id === opts.actor.staffId) throw forbidden('You cannot approve your own action');
-    const [approver] = await tx<{ pos_pin_hash: string | null }[]>`
-      SELECT pos_pin_hash FROM staff WHERE id = ${opts.approval.approver_staff_id} AND status = 'active'`;
-    if (!approver || !(await verifySecret(opts.approval.approver_pin, approver.pos_pin_hash))) {
-      throw forbidden('Approval PIN is incorrect');
-    }
-    const approverActor = await loadActor(tx, opts.approval.approver_staff_id);
-    requirePermission(approverActor, 'pos.approve', opts.actionCode);
-    // An approver is bound by their OWN explicit cap (e.g. a manager's £200
-    // refund limit). Per-shift counters describe the requester, not the approver.
-    const approverCap = opts.limitCode && !opts.limitCode.endsWith('.max_per_shift')
-      ? approverActor.limits.get(opts.limitCode) : undefined;
-    if (!approverActor.isOwner && approverCap !== undefined && opts.value > approverCap) {
-      throw forbidden('This is also over the approver\'s limit');
-    }
+    const approverActor = await verifyApprover(tx, { ...opts, approval: opts.approval });
     approvedBy = approverActor.staffId;
     outcome = 'approved';
   }
