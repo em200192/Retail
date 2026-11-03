@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  apportion, divRoundHalfUp, evaluateDiscount, evaluateLimit, formatGBP, formatReceiptNumber, gtinCheckDigitValid,
+  apportion, ARABIC_UK_LOCALE, divRoundHalfUp, evaluateDiscount, evaluateLimit, formatDateTimeUK, formatDateUK, formatGBP, formatTimeUK, latinDigits, formatReceiptNumber, gtinCheckDigitValid,
   lineAmount, LIMITS, parseReceiptNumber, parseScaleBarcode, percentOf, PERMISSIONS, quantityToMilli, UUID_RE,
   uuidv7, vatFromGross,
 } from '../src/index.ts';
@@ -89,5 +89,28 @@ describe('permissions', () => {
     expect(evaluateDiscount(5, 50, { maxPercent: 5, maxAmountPence: 100 }, false)).toBe('self_authorised');
     expect(evaluateDiscount(5, 150, { maxPercent: 5, maxAmountPence: 100 }, false)).toBe('needs_approval');
     expect(evaluateDiscount(40, 5000, { maxPercent: 50, maxAmountPence: null }, false)).toBe('self_authorised');
+  });
+});
+
+describe('date formatting (locales)', () => {
+  const at = '2026-11-03T14:05:00Z';
+  it('defaults to en-GB, Europe/London', () => {
+    expect(formatDateTimeUK(at)).toBe('03 Nov 2026, 14:05');
+    expect(formatTimeUK('2026-07-01T11:30:00Z')).toBe('12:30'); // BST
+    expect(formatDateUK('2026-11-03')).toBe('03 Nov 2026');
+  });
+  it('formats Arabic month names with Latin digits', () => {
+    const s = formatDateTimeUK(at, ARABIC_UK_LOCALE);
+    expect(s).toContain('نوفمبر');
+    expect(s).toMatch(/03/);
+    expect(s).toMatch(/2026/);
+    expect(s).toMatch(/14:05/);
+    expect(s).not.toMatch(/[٠-٩]/);
+    expect(formatTimeUK(at, ARABIC_UK_LOCALE)).toBe('14:05');
+    expect(formatDateUK('2026-01-15', { month: 'long' }, ARABIC_UK_LOCALE)).toBe('يناير');
+  });
+  it('turns Arabic-Indic digits into 0-9', () => {
+    expect(latinDigits('٠١٢٣٤٥٦٧٨٩ / ۰۹')).toBe('0123456789 / 09');
+    expect(latinDigits('£12.34')).toBe('£12.34');
   });
 });
