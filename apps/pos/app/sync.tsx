@@ -64,6 +64,9 @@ export default function SyncStatus() {
             <T v="small" muted>{formatDateTimeUK(i.createdAt)} · {formatGBP(Number((i.payload as { total_pence?: number }).total_pence ?? 0))}</T>
           </Row>
           <T tone={color.danger}>{i.message}</T>
+          {Array.isArray(i.details) ? (i.details as { path?: string; message?: string }[]).slice(0, 4).map((d, n) => (
+            <T key={n} v="small" muted>• {d.path ? `${d.path}: ` : ''}{d.message}</T>
+          )) : null}
           {i.error ? <T v="small" muted>Code: {i.error}</T> : null}
           <Row>
             <Button kind="secondary" label="Retry" onPress={() => void queue.retry(i.id).then(syncNow)} />
