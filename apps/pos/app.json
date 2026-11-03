@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Counter",
+    "slug": "counter-pos",
+    "scheme": "counter",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "light",
+    "platforms": ["ios", "android", "web"],
+    "backgroundColor": "#F7F8FA",
+    "ios": { "supportsTablet": true, "requireFullScreen": false, "bundleIdentifier": "com.counter.pos" },
+    "android": { "package": "com.counter.pos" },
+    "web": { "bundler": "metro", "output": "single", "name": "Counter till", "themeColor": "#0B6E69" },
+    "plugins": ["expo-router", "expo-secure-store", "expo-sqlite"]
+  }
+}

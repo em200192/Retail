@@ -5,3 +5,6 @@ coverage/
 .env.*
 !.env.example
 *.log
+.expo/
+expo-env.d.ts
+web-build/
