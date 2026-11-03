@@ -1,4 +1,4 @@
-import { formatGBP, formatQuantity, lineAmount, uuidv7, VAT_LABELS } from '@retail/shared';
+import { formatGBP, formatQuantity, lineAmount, uuidv7 } from '@retail/shared';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
@@ -7,6 +7,7 @@ import {
   setBasketDiscount, setLineDiscount, setQuantity, type TillLine, voidLine,
 } from '../src/logic/basket';
 import { popularProducts, primaryBarcode, type Product, searchProducts } from '../src/logic/catalog';
+import { ltr, type MessageKey, t, textDir, tn, useLang, vatLabel } from '../src/i18n';
 import { can, discountDecision, limitDecision } from '../src/logic/permissions';
 import { resolveProduct, resolveScan, type ScannedItem, type ScanOutcome } from '../src/logic/pricing';
 import {
@@ -21,10 +22,21 @@ type Pending = { item: ScannedItem } | null;
 type DiscountTarget = { kind: 'line'; lineId: string } | { kind: 'basket' } | null;
 type ApprovalCtx = { request: ApprovalRequest; resolve: (r: ApprovalResult) => void } | null;
 
-const VOID_REASONS = ['Scanned in error', 'Customer changed mind', 'Damaged item', 'Price query'];
-const DISCOUNT_REASONS = ['Damaged packaging', 'Short date', 'Price match', 'Staff discount', 'Goodwill'];
+/** The English text is what is recorded on the sale (void_reason); staff see it in their language. */
+const VOID_REASONS: { value: string; key: MessageKey }[] = [
+  { value: 'Scanned in error', key: 'void.reason.scannedInError' },
+  { value: 'Customer changed mind', key: 'void.reason.changedMind' },
+  { value: 'Damaged item', key: 'void.reason.damaged' },
+  { value: 'Price query', key: 'void.reason.priceQuery' },
+];
+const voidReasonLabel = (value: string | null | undefined) => {
+  const r = VOID_REASONS.find((x) => x.value === value);
+  return r ? t(r.key) : value ?? '';
+};
+const DISCOUNT_REASONS = ['damaged_packaging', 'short_date', 'price_match', 'staff_discount', 'goodwill'] as const;
 
 export default function Sell() {
+  useLang();
   const { width } = useWindowDimensions();
   const wide = width >= 960;
   const catalog = useApp((s) => s.catalog);
@@ -57,8 +69,8 @@ export default function Sell() {
 
   // ------------------------------------------------------------------ adding items
   const addOutcome = (o: ScanOutcome) => {
-    if (o.kind === 'unknown') return toast(`Unknown barcode ${o.barcode} — not in this shop’s catalogue`, 'danger');
-    if (o.kind === 'no_price') return toast(`${o.product.name} has no price set — ask a manager`, 'danger');
+    if (o.kind === 'unknown') return toast(t('sell.unknownBarcode', { barcode: o.barcode }), 'danger');
+    if (o.kind === 'no_price') return toast(t('sell.noPrice', { name: o.product.name }), 'danger');
     const minAge = o.product.min_age;
     if (minAge) {
       const passed = getState().basket.ageChecks.find((a) => (a.outcome === 'looked_over_25' || a.outcome === 'id_checked_ok') && a.requiredAge >= minAge);
@@ -67,7 +79,7 @@ export default function Sell() {
     } else {
       setBasket((b) => addItem(b, o).basket);
     }
-    toast(`${o.product.name} · ${formatGBP(lineAmount(o.unitPricePence, o.quantity))}`, 'success');
+    toast(t('sell.added', { name: o.product.name, amount: formatGBP(lineAmount(o.unitPricePence, o.quantity)) }), 'success');
     focusScan();
   };
 
@@ -100,10 +112,10 @@ export default function Sell() {
     setPendingAge(null);
     if (outcome === 'looked_over_25' || outcome === 'id_checked_ok') {
       setBasket((b) => addItem(addAgeCheck(b, check), p.item, { ageCheckId: check.id }).basket);
-      toast(`${p.item.product.name} added · age check passed`, 'success');
+      toast(t('sell.addedAgeOk', { name: p.item.product.name }), 'success');
     } else {
       setBasket((b) => addAgeCheck(b, check));
-      toast(`Sale of ${p.item.product.name} refused — not added`, 'danger');
+      toast(t('sell.ageRefused', { name: p.item.product.name }), 'danger');
     }
     focusScan();
   };
@@ -142,19 +154,19 @@ export default function Sell() {
       let voidedBy = staff.id;
       let rec;
       if (!can(staff, 'pos.void_sale')) {
-        const r = await askApproval({ action: 'pos.void_sale', title: 'Manager approval: void sale', description: `${staff.display_name} wants to void this sale (${formatGBP(totals.total)}).` });
+        const r = await askApproval({ action: 'pos.void_sale', title: t('sell.voidSaleApprovalTitle'), description: t('sell.voidSaleApprovalBody', { name: staff.display_name, amount: formatGBP(totals.total) }) });
         if (!r) return focusScan();
         voidedBy = r.approverId;
         rec = newApproval({ actionCode: 'pos.void_sale', requestedBy: staff.id, approvedBy: r.approverId, outcome: 'approved', value: totals.total, reason });
       }
       await voidSale(voidedBy, reason, rec);
-      toast('Sale voided and recorded', 'neutral');
+      toast(t('sell.saleVoided'), 'neutral');
       return focusScan();
     }
     const n = voidsSoFar(staff.id) + 1;
     if (limitDecision(staff, 'pos.void_line.max_per_shift', n) === 'needs_approval') {
       const r = await askApproval({ action: 'pos.void_line', limit: { code: 'pos.void_line.max_per_shift', value: n },
-        title: 'Manager approval: void item', description: `This would be void number ${n} this shift — over ${staff.display_name}’s limit.` });
+        title: t('sell.voidItemApprovalTitle'), description: t('sell.voidItemApprovalBody', { count: n, name: staff.display_name }) });
       if (!r) return focusScan();
       setBasket((b) => addApproval(b, newApproval({ saleLineId: target, actionCode: 'pos.void_line', requestedBy: staff.id, approvedBy: r.approverId, outcome: 'approved', value: n, reason })));
     }
@@ -180,13 +192,13 @@ export default function Sell() {
       base = priceOf(b).totals.subtotal;
       amount = priceOf(trial).totals.discount - priceOf(b).totals.discount;
     }
-    if (amount <= 0) return toast('That discount is worth nothing', 'danger');
+    if (amount <= 0) return toast(t('sell.discountWorthless'), 'danger');
     const pct = discountPercent(base, spec, amount);
     const decision = discountDecision(staff, pct, amount);
     let approvalRec;
     if (decision === 'needs_approval') {
       const r = await askApproval({ action: 'pos.discount', limit: { code: 'pos.discount.max_percent', value: pct },
-        title: 'Manager approval: discount', description: `${formatGBP(amount)} (${pct.toFixed(1)}%) is over ${staff.display_name}’s discount limit.` });
+        title: t('sell.discountApprovalTitle'), description: t('sell.discountApprovalBody', { amount: formatGBP(amount), percent: `${pct.toFixed(1)}%`, name: staff.display_name }) });
       if (!r) return focusScan();
       approvalRec = newApproval({ saleLineId: target.kind === 'line' ? target.lineId : null, actionCode: 'pos.discount', requestedBy: staff.id, approvedBy: r.approverId, outcome: 'approved', value: pct });
     } else {
@@ -197,7 +209,7 @@ export default function Sell() {
       const next = addApproval(bk, approvalRec!);
       return target.kind === 'line' ? setLineDiscount(next, target.lineId, withApproval) : setBasketDiscount(next, withApproval);
     });
-    toast(`Discount ${formatGBP(amount)} applied`, 'success');
+    toast(t('sell.discountApplied', { amount: formatGBP(amount) }), 'success');
     focusScan();
   };
 
@@ -214,8 +226,8 @@ export default function Sell() {
           <TextInput
             ref={scanRef}
             testID="scan-input"
-            accessibilityLabel="Scan a barcode or search for a product"
-            placeholder="Scan a barcode or type to search…"
+            accessibilityLabel={t('sell.scanLabel')}
+            placeholder={t('sell.scanPlaceholder')}
             placeholderTextColor="#8A94A6"
             value={query}
             onChangeText={setQuery}
@@ -227,11 +239,11 @@ export default function Sell() {
             returnKeyType="done"
             style={styles.scanInput}
           />
-          {query ? <Button kind="ghost" label="Clear" onPress={() => { setQuery(''); focusScan(); }} /> : null}
+          {query ? <Button kind="ghost" label={t('common.clear')} onPress={() => { setQuery(''); focusScan(); }} /> : null}
         </Row>
       </Card>
-      {!tillSession ? <Banner tone="warning" text="No till session is open — sales won’t be on a Z report." action={<Button kind="secondary" label="Open till" onPress={() => router.push('/open-till')} />} /> : null}
-      <T v="caption" muted>{results.length ? `${results.length} match${results.length === 1 ? '' : 'es'}` : query.trim().length >= 2 && !/^\d+$/.test(query.trim()) ? 'No matches' : 'Quick picks'}</T>
+      {!tillSession ? <Banner tone="warning" text={t('sell.noSession')} action={<Button kind="secondary" label={t('sell.openTill')} onPress={() => router.push('/open-till')} />} /> : null}
+      <T v="caption" muted>{results.length ? tn('sell.matches', results.length) : query.trim().length >= 2 && !/^\d+$/.test(query.trim()) ? t('sell.noMatches') : t('sell.quickPicks')}</T>
       <View style={styles.grid}>
         {(results.length ? results : query.trim().length >= 2 && !/^\d+$/.test(query.trim()) ? [] : popular).map((p) => (
           <ProductTile key={p.id} product={p} onPress={() => { pickProduct(p); setQuery(''); }} />
@@ -243,14 +255,14 @@ export default function Sell() {
   const right = (
     <Card padded={false} style={{ flex: wide ? 1 : undefined, minWidth: wide ? 400 : undefined, maxWidth: wide ? 520 : undefined, overflow: 'hidden' }}>
       <Row style={{ justifyContent: 'space-between', paddingHorizontal: space.lg, paddingTop: space.lg, paddingBottom: space.sm }}>
-        <T v="h2" accessibilityRole="header">Basket</T>
-        <T muted>{liveCount ? `${formatQuantity(totals.items)} item${totals.items === 1 ? '' : 's'}` : 'Empty'}</T>
+        <T v="h2" accessibilityRole="header">{t('sell.basket')}</T>
+        <T muted>{liveCount ? tn('sell.items', totals.items, { count: formatQuantity(totals.items) }) : t('sell.empty')}</T>
       </Row>
       <ScrollView style={{ flex: wide ? 1 : undefined, maxHeight: wide ? undefined : 380 }} contentContainerStyle={{ paddingHorizontal: space.md, gap: 6 }} testID="basket">
         {basket.lines.length === 0 ? (
           <View style={{ alignItems: 'center', padding: space.xxl, gap: space.sm }}>
-            <T v="h3" muted>Scan an item to start</T>
-            <T v="small" muted>or tap a quick pick</T>
+            <T v="h3" muted>{t('sell.emptyTitle')}</T>
+            <T v="small" muted>{t('sell.emptyHint')}</T>
           </View>
         ) : null}
         {priced.map((p) => {
@@ -266,22 +278,22 @@ export default function Sell() {
         })}
       </ScrollView>
       <View style={styles.totals}>
-        <TotalRow label="Subtotal" value={formatGBP(totals.subtotal)} />
-        {totals.discount ? <TotalRow label="Discounts" value={`−${formatGBP(totals.discount)}`} tone={color.success} /> : null}
+        <TotalRow label={t('sell.subtotal')} value={formatGBP(totals.subtotal)} />
+        {totals.discount ? <TotalRow label={t('sell.discounts')} value={`−${formatGBP(totals.discount)}`} tone={color.success} /> : null}
         {Object.entries(totals.vatByCode).map(([code, v]) => (
-          <TotalRow key={code} label={`VAT ${VAT_LABELS[code] ?? code}`} value={formatGBP(v.vat)} small />
+          <TotalRow key={code} label={t('vat.line', { label: vatLabel(code) })} value={formatGBP(v.vat)} small />
         ))}
         <Divider />
         <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <T v="h3">Total{training ? ' (training)' : ''}</T>
+          <T v="h3">{training ? t('sell.totalTraining') : t('sell.total')}</T>
           <Money pence={formatGBP(totals.total)} size={44} />
         </Row>
         <Row style={{ marginTop: space.sm }}>
-          <Button kind="secondary" label="Discount" icon="%" disabled={!canDiscount || isEmpty(basket)} onPress={() => setDiscountTarget({ kind: 'basket' })}
-            hint="Discount the whole basket" style={{ flex: 1 }} />
-          <Button kind="danger" label="Void sale" disabled={isEmpty(basket)} onPress={() => setVoidTarget('sale')} style={{ flex: 1 }} />
+          <Button kind="secondary" label={t('sell.discount')} icon="%" disabled={!canDiscount || isEmpty(basket)} onPress={() => setDiscountTarget({ kind: 'basket' })}
+            hint={t('sell.discountHint')} style={{ flex: 1 }} />
+          <Button kind="danger" label={t('sell.voidSale')} disabled={isEmpty(basket)} onPress={() => setVoidTarget('sale')} style={{ flex: 1 }} />
         </Row>
-        <Button testID="pay" label={isEmpty(basket) ? 'Pay' : `Pay ${formatGBP(totals.total)}`} size="xl" disabled={isEmpty(basket) || !can(staff, 'pos.sell')}
+        <Button testID="pay" label={isEmpty(basket) ? t('sell.pay') : t('sell.payAmount', { amount: formatGBP(totals.total) })} size="xl" disabled={isEmpty(basket) || !can(staff, 'pos.sell')}
           onPress={() => router.push('/pay')} />
       </View>
     </Card>
@@ -319,15 +331,19 @@ function ProductTile({ product, onPress }: { product: Product; onPress: () => vo
   const price = o.kind === 'item' ? o.unitPricePence : null;
   return (
     <Pressable testID={`tile-${product.name}`} accessibilityRole="button"
-      accessibilityLabel={`${product.name}, ${price !== null ? formatGBP(price) : 'no price'}${product.min_age ? `, age ${product.min_age} plus` : ''}${o.kind === 'item' && o.isPmp ? ', price marked' : ''}`}
+      accessibilityLabel={[
+        t('tile.a11y', { name: product.name, price: price !== null ? formatGBP(price) : t('tile.noPrice') }),
+        product.min_age ? t('tile.agePlus', { age: product.min_age }) : null,
+        o.kind === 'item' && o.isPmp ? t('tile.priceMarked') : null,
+      ].filter(Boolean).join(t('common.listSep'))}
       onPress={onPress}
       style={({ pressed }) => [styles.tile, pressed && { backgroundColor: color.primaryTint, transform: [{ scale: 0.985 }] }]}>
-      <Text numberOfLines={2} style={styles.tileName}>{product.name}</Text>
+      <Text numberOfLines={2} style={[styles.tileName, textDir()]}>{product.name}</Text>
       <Row style={{ justifyContent: 'space-between', marginTop: 'auto' }}>
-        <Text style={styles.tilePrice}>{price !== null ? formatGBP(price) : '—'}{product.sold_by_weight ? '/kg' : ''}</Text>
+        <Text style={styles.tilePrice}>{ltr(`${price !== null ? formatGBP(price) : '—'}${product.sold_by_weight ? t('unit.perKg') : ''}`)}</Text>
         <Row gap={4}>
-          {o.kind === 'item' && o.isPmp ? <Badge label="PMP" tone="primary" /> : null}
-          {product.min_age ? <Badge label={`${product.min_age}+`} tone="accent" /> : null}
+          {o.kind === 'item' && o.isPmp ? <Badge label={t('tile.pmp')} tone="primary" /> : null}
+          {product.min_age ? <Badge label={ltr(`${product.min_age}+`)} tone="accent" /> : null}
         </Row>
       </Row>
     </Pressable>
@@ -342,16 +358,18 @@ function BasketRow({ line, total, discount, selected, onSelect, onMinus, onPlus,
   const weighed = line.embedded !== null;
   return (
     <View style={[styles.line, selected && { borderColor: color.primary, backgroundColor: '#FBFDFD' }, voided && { opacity: 0.6 }]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${line.description}, quantity ${line.quantity}, ${formatGBP(total)}${voided ? ', voided' : ''}. Show actions`}
+      <Pressable accessibilityRole="button" accessibilityLabel={t(voided ? 'line.a11yVoided' : 'line.a11y', { name: line.description, qty: formatQuantity(line.quantity), amount: formatGBP(total) })}
         onPress={voided ? undefined : onSelect} style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
         <View style={{ flex: 1, gap: 3 }}>
-          <Text numberOfLines={2} style={[styles.lineName, voided && { textDecorationLine: 'line-through' }]}>{line.description}</Text>
+          <Text numberOfLines={2} style={[styles.lineName, textDir(), voided && { textDecorationLine: 'line-through' }]}>{line.description}</Text>
           <Row gap={6} wrap>
-            <T v="small" muted>{weighed && line.embedded === 'weight' ? `${formatQuantity(line.quantity, 'kg')} @ ${formatGBP(line.unitPricePence)}/kg` : `${formatQuantity(line.quantity)} × ${formatGBP(line.unitPricePence)}`}</T>
-            {line.isPmp && line.pmpPricePence !== null ? <Badge label={`PMP ${formatGBP(line.pmpPricePence)}`} tone="primary" /> : null}
-            {line.minAge ? <Badge label={`${line.minAge}+ checked`} tone="accent" symbol="✓" /> : null}
-            {discount > 0 ? <Badge label={`−${formatGBP(discount)}`} tone="success" /> : null}
-            {voided ? <Badge label={`Voided · ${line.voidReason ?? ''}`} tone="danger" symbol="✕" /> : null}
+            <T v="small" muted>{weighed && line.embedded === 'weight'
+              ? t('line.weighed', { qty: formatQuantity(line.quantity), price: formatGBP(line.unitPricePence) })
+              : t('line.qtyPrice', { qty: formatQuantity(line.quantity), price: formatGBP(line.unitPricePence) })}</T>
+            {line.isPmp && line.pmpPricePence !== null ? <Badge label={t('line.pmp', { price: formatGBP(line.pmpPricePence) })} tone="primary" /> : null}
+            {line.minAge ? <Badge label={t('line.ageChecked', { age: `${line.minAge}+` })} tone="accent" symbol="✓" /> : null}
+            {discount > 0 ? <Badge label={ltr(`−${formatGBP(discount)}`)} tone="success" /> : null}
+            {voided ? <Badge label={t('line.voided', { reason: voidReasonLabel(line.voidReason) })} tone="danger" symbol="✕" /> : null}
           </Row>
         </View>
         <Money pence={formatGBP(total)} size={18} style={voided ? { textDecorationLine: 'line-through', color: color.muted } : undefined} />
@@ -360,14 +378,14 @@ function BasketRow({ line, total, discount, selected, onSelect, onMinus, onPlus,
         <Row style={{ marginTop: space.sm }} wrap>
           {!weighed ? (
             <>
-              <Button kind="secondary" label="−" accessibilityLabel={`One less ${line.description}`} onPress={onMinus} disabled={line.quantity <= 1 && !canVoid} style={{ width: 56 }} />
+              <Button kind="secondary" label="−" accessibilityLabel={t('common.oneLess', { name: line.description })} onPress={onMinus} disabled={line.quantity <= 1 && !canVoid} style={{ width: 56 }} />
               <T v="h3" style={{ minWidth: 36, textAlign: 'center' }}>{formatQuantity(line.quantity)}</T>
-              <Button kind="secondary" label="+" accessibilityLabel={`One more ${line.description}`} onPress={onPlus} style={{ width: 56 }} />
+              <Button kind="secondary" label="+" accessibilityLabel={t('common.oneMore', { name: line.description })} onPress={onPlus} style={{ width: 56 }} />
             </>
           ) : null}
           <View style={{ flex: 1 }} />
-          {onDiscount ? <Button kind="secondary" label="Discount" onPress={onDiscount} /> : null}
-          <Button testID={`void-${line.description}`} kind="danger" label="Void" onPress={onVoid} disabled={!onVoid} />
+          {onDiscount ? <Button kind="secondary" label={t('sell.discount')} onPress={onDiscount} /> : null}
+          <Button testID={`void-${line.description}`} kind="danger" label={t('line.void')} onPress={onVoid} disabled={!onVoid} />
         </Row>
       ) : null}
     </View>
@@ -387,11 +405,11 @@ function VoidSheet({ target, basket, onCancel, onConfirm }: { target: string | '
   if (!target) return null;
   const line = target === 'sale' ? null : basket.lines.find((l) => l.id === target);
   return (
-    <Sheet visible title={target === 'sale' ? 'Void the whole sale?' : `Void ${line?.description ?? 'item'}?`} onClose={onCancel} testID="void-sheet">
-      <T muted>{target === 'sale' ? 'The sale is kept as voided for the records. Nothing is charged and stock does not move.' : 'The line stays on the sale as voided (loss prevention) and is not charged.'}</T>
-      <T v="label">Reason</T>
+    <Sheet visible title={target === 'sale' ? t('void.saleTitle') : t('void.itemTitle', { name: line?.description ?? t('void.item') })} onClose={onCancel} testID="void-sheet">
+      <T muted>{target === 'sale' ? t('void.saleBody') : t('void.itemBody')}</T>
+      <T v="label">{t('common.reason')}</T>
       <View style={{ gap: space.sm }}>
-        {VOID_REASONS.map((r) => <Button key={r} kind="secondary" label={r} onPress={() => onConfirm(r)} style={{ alignItems: 'flex-start' }} />)}
+        {VOID_REASONS.map((r) => <Button key={r.value} kind="secondary" label={t(r.key)} onPress={() => onConfirm(r.value)} style={{ alignItems: 'flex-start' }} />)}
       </View>
     </Sheet>
   );
@@ -410,24 +428,23 @@ function DiscountSheet({ target, basket, onCancel, onApply }: {
   const value = type === 'percent' ? Math.min(Number(typed || '0'), 100) : Number(typed || '0');
   const preview = type === 'percent' ? Math.round((base * value) / 100) : Math.min(value, base);
   return (
-    <Sheet visible title={line ? `Discount: ${line.description}` : 'Discount the basket'} onClose={onCancel} testID="discount-sheet"
-      footer={<Button label={`Apply −${formatGBP(preview)}`} size="lg" disabled={preview <= 0} onPress={() => onApply(type, value, reason)} />}>
-      <Segmented label="Discount type" value={type} onChange={(v) => { setType(v); setTyped(''); }}
-        options={[{ value: 'percent', label: 'Percent %' }, { value: 'amount', label: 'Amount £' }]} />
+    <Sheet visible title={line ? t('discount.lineTitle', { name: line.description }) : t('discount.basketTitle')} onClose={onCancel} testID="discount-sheet"
+      footer={<Button label={t('discount.apply', { amount: `−${formatGBP(preview)}` })} size="lg" disabled={preview <= 0} onPress={() => onApply(type, value, reason)} />}>
+      <Segmented label={t('discount.type')} value={type} onChange={(v) => { setType(v); setTyped(''); }}
+        options={[{ value: 'percent', label: t('discount.percent') }, { value: 'amount', label: t('discount.amount') }]} />
       <Row style={{ justifyContent: 'space-between', alignItems: 'center' }} wrap gap={space.lg}>
         <View>
-          <T muted>Off {formatGBP(base)}</T>
+          <T muted>{t('discount.off', { amount: formatGBP(base) })}</T>
           <Money pence={type === 'percent' ? `${value}%` : formatGBP(value)} size={44} />
-          <T muted>Customer saves {formatGBP(preview)}</T>
+          <T muted>{t('discount.saves', { amount: formatGBP(preview) })}</T>
         </View>
         <Keypad size={60} testIDPrefix="disc" onKey={(k) => setTyped((t) => applyAmountKey(t, k, type === 'percent' ? 3 : 6))} />
       </Row>
-      <T v="label">Reason</T>
+      <T v="label">{t('common.reason')}</T>
       <Row wrap>
-        {DISCOUNT_REASONS.map((r) => {
-          const code = r.toLowerCase().replace(/\s+/g, '_');
-          return <Button key={r} kind={reason === code ? 'primary' : 'secondary'} label={r} onPress={() => setReason(code)} selected={reason === code} />;
-        })}
+        {DISCOUNT_REASONS.map((code) => (
+          <Button key={code} kind={reason === code ? 'primary' : 'secondary'} label={t(`discount.reason.${code}`)} onPress={() => setReason(code)} selected={reason === code} />
+        ))}
       </Row>
     </Sheet>
   );

@@ -3,6 +3,7 @@ import {
   type AccessibilityRole, Modal, Platform, Pressable, ScrollView, type StyleProp, StyleSheet, Text, type TextProps, TextInput,
   type TextInputProps, type TextStyle, View, type ViewStyle,
 } from 'react-native';
+import { dirStyle, isRTL, LTR, ltr, t, textDir, useLang } from '../i18n';
 import { color, font, radius, shadow, shadowLg, space, touch } from './theme';
 
 // ------------------------------------------------------------------ text
@@ -19,13 +20,16 @@ const textStyles: Record<Variant, TextStyle> = {
 };
 
 export function T({ v = 'body', muted, tone, style, ...rest }: TextProps & { v?: Variant; muted?: boolean; tone?: string }) {
-  return <Text {...rest} style={[{ color: tone ?? (muted ? color.muted : color.ink), fontFamily: font.family }, textStyles[v], style]} />;
+  useLang();
+  return <Text {...rest} style={[{ color: tone ?? (muted ? color.muted : color.ink), fontFamily: font.family }, textStyles[v], textDir(), style]} />;
 }
 
+/** A money figure (or %): always reads left-to-right (−£1.20), even inside Arabic layouts. */
 export function Money({ pence, size = 16, style, tone }: { pence: string; size?: number; style?: StyleProp<TextStyle>; tone?: string }) {
+  useLang();
   return (
-    <Text style={[{ fontFamily: font.family, fontVariant: ['tabular-nums'], fontWeight: '700', fontSize: size, color: tone ?? color.ink }, style]}>
-      {pence}
+    <Text style={[{ fontFamily: font.family, fontVariant: ['tabular-nums'], fontWeight: '700', fontSize: size, color: tone ?? color.ink }, textDir(), style]}>
+      {ltr(pence)}
     </Text>
   );
 }
@@ -58,6 +62,7 @@ export interface ButtonProps {
 }
 
 export function Button({ label, onPress, kind = 'primary', size = 'md', disabled, icon, hint, accessibilityLabel, style, testID, sub, role = 'button', selected }: ButtonProps) {
+  useLang();
   const k = kinds[kind];
   const h = size === 'xl' ? 76 : size === 'lg' ? touch.till : touch.min;
   const fs = size === 'xl' ? 22 : size === 'lg' ? 18 : 16;
@@ -80,9 +85,9 @@ export function Button({ label, onPress, kind = 'primary', size = 'md', disabled
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
         {icon ? <Text style={{ color: k.fg, fontSize: fs + 2, fontFamily: font.family }} aria-hidden>{icon}</Text> : null}
-        <Text style={{ color: k.fg, fontSize: fs, fontWeight: '700', fontFamily: font.family, textAlign: 'center' }}>{label}</Text>
+        <Text style={[textDir(), { color: k.fg, fontSize: fs, fontWeight: '700', fontFamily: font.family, textAlign: 'center' }]}>{label}</Text>
       </View>
-      {sub ? <Text style={{ color: k.fg, opacity: 0.85, fontSize: 13, marginTop: 2, fontFamily: font.family }}>{sub}</Text> : null}
+      {sub ? <Text style={[{ color: k.fg, opacity: 0.85, fontSize: 13, marginTop: 2, fontFamily: font.family }, textDir()]}>{sub}</Text> : null}
     </Pressable>
   );
 }
@@ -117,7 +122,7 @@ export function Badge({ label, tone = 'neutral', symbol, style }: { label: strin
   return (
     <View style={[styles.badge, { backgroundColor: t.bg, borderColor: t.border }, style]} accessibilityLabel={label}>
       {symbol ? <Text style={{ color: t.fg, fontSize: 12, fontWeight: '800', fontFamily: font.family }}>{symbol}</Text> : null}
-      <Text style={{ color: t.fg, fontSize: 12, fontWeight: '700', fontFamily: font.family }}>{label}</Text>
+      <Text style={[{ color: t.fg, fontSize: 12, fontWeight: '700', fontFamily: font.family }, textDir()]}>{label}</Text>
     </View>
   );
 }
@@ -142,7 +147,7 @@ export function Field({ label, error, style, inputStyle, ...rest }: TextInputPro
         accessibilityLabel={label}
         placeholderTextColor="#8A94A6"
         {...rest}
-        style={[styles.input, error ? { borderColor: color.danger } : null, inputStyle]}
+        style={[styles.input, Platform.OS !== 'web' ? { textAlign: isRTL() ? 'right' : 'left' } : null, error ? { borderColor: color.danger } : null, inputStyle]}
       />
       {error ? <T v="small" tone={color.danger}>! {error}</T> : null}
     </View>
@@ -167,11 +172,13 @@ export function Segmented<V extends string>({ options, value, onChange, label }:
 }
 
 // ------------------------------------------------------------------ keypad
+/** Number pad. Always 1-2-3 left to right (like a phone or card terminal), in every language. */
 export function Keypad({ onKey, keys, size = 64, testIDPrefix = 'key' }: { onKey: (k: string) => void; keys?: string[]; size?: number; testIDPrefix?: string }) {
+  useLang();
   const layout = keys ?? ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'];
-  const label = (k: string) => (k === '⌫' ? 'Delete' : k === 'C' ? 'Clear' : k === '00' ? 'Double zero' : k);
+  const label = (k: string) => (k === '⌫' ? t('keypad.delete') : k === 'C' ? t('keypad.clear') : k === '00' ? t('keypad.doubleZero') : k);
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, width: size * 3 + space.sm * 2 }}>
+    <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, width: size * 3 + space.sm * 2 }, LTR]}>
       {layout.map((k) => (
         <Pressable key={k} testID={`${testIDPrefix}-${k}`} accessibilityRole="button" accessibilityLabel={label(k)} onPress={() => onKey(k)}
           style={({ pressed }) => [styles.key, { width: size, height: size }, pressed && { backgroundColor: color.primaryTint, transform: [{ scale: 0.97 }] }]}>
@@ -194,15 +201,17 @@ export function applyAmountKey(current: string, k: string, max = 9): string {
 export function Sheet({ visible, onClose, title, children, width = 560, footer, testID }: {
   visible: boolean; onClose?: () => void; title: string; children: ReactNode; width?: number; footer?: ReactNode; testID?: string;
 }) {
+  useLang();
   useEscape(visible ? onClose : undefined);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.overlay}>
+      {/* A native Modal is its own root view, so it needs the direction again. */}
+      <View style={[styles.overlay, dirStyle()]}>
         <View testID={testID} accessibilityViewIsModal accessibilityLabel={title} style={[styles.sheet, { maxWidth: width }]} role="dialog" aria-modal>
           <Row style={{ justifyContent: 'space-between', marginBottom: space.md }}>
             <T v="h2" accessibilityRole="header" style={{ flex: 1 }}>{title}</T>
             {onClose ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} onPress={onClose} style={styles.close}>
                 <Text style={{ fontSize: 22, color: color.muted, fontFamily: font.family }}>×</Text>
               </Pressable>
             ) : null}

@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { dirStyle, t, useLang } from '../src/i18n';
 import { boot, getState, lock, runtime, startBackgroundSync, useApp } from '../src/state/store';
 import { Toast, TopBar, TrainingBanner } from '../src/ui/chrome';
 import { color, WEB_CSS } from '../src/ui/theme';
@@ -15,7 +16,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined' && !document.getEle
   el.id = 'counter-css';
   el.textContent = WEB_CSS;
   document.head.appendChild(el);
-  document.title = 'Counter till';
+  document.title = t('app.title');
 }
 
 export default function RootLayout() {
@@ -24,6 +25,8 @@ export default function RootLayout() {
   const authed = useApp((s) => !!s.session && !s.locked);
   const path = usePathname();
   const lastActivity = useRef(Date.now());
+  // The whole app re-renders when the language changes; the direction is set here (no restart).
+  const lang = useLang();
 
   useEffect(() => {
     void boot().then(startBackgroundSync);
@@ -57,7 +60,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <View style={{ flex: 1, backgroundColor: color.surface }} onTouchStart={() => { lastActivity.current = Date.now(); }}>
+      <View style={[{ flex: 1, backgroundColor: color.surface }, dirStyle(lang)]} onTouchStart={() => { lastActivity.current = Date.now(); }}>
         {booted ? (
           <>
             <TopBar />
@@ -67,7 +70,7 @@ export default function RootLayout() {
           </>
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator color={color.primary} size="large" accessibilityLabel="Starting the till" />
+            <ActivityIndicator color={color.primary} size="large" accessibilityLabel={t('app.starting')} />
           </View>
         )}
       </View>

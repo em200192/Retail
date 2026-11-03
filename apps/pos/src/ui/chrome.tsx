@@ -1,6 +1,7 @@
 import { router, usePathname } from 'expo-router';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { t, textDir, tn, useLang } from '../i18n';
 import { lock, useApp } from '../state/store';
 import { Row, T } from './components';
 import { color, font, radius, space } from './theme';
@@ -11,22 +12,23 @@ export function StatusPill({ compact }: { compact?: boolean }) {
   const pending = useApp((s) => s.queue.pending);
   const rejected = useApp((s) => s.queue.rejected);
   const syncError = useApp((s) => s.syncError);
+  useLang();
   let label: string, symbol: string, bg: string, fg: string, border: string;
   if (!online) {
-    label = pending ? `Offline · ${pending} waiting` : 'Offline'; symbol = '○'; bg = '#FFF4D1'; fg = '#6B4A00'; border = '#F2D27A';
+    label = pending ? t('status.offlineWaiting', { count: pending }) : t('status.offline'); symbol = '○'; bg = '#FFF4D1'; fg = '#6B4A00'; border = '#F2D27A';
   } else if (rejected) {
-    label = `${rejected} sync issue${rejected === 1 ? '' : 's'}`; symbol = '!'; bg = color.dangerTint; fg = color.danger; border = '#EDB9B9';
+    label = tn('status.issues', rejected); symbol = '!'; bg = color.dangerTint; fg = color.danger; border = '#EDB9B9';
   } else if (pending) {
-    label = `Online · ${pending} sending`; symbol = '↑'; bg = color.primaryTint; fg = color.primary; border = '#B9DAD7';
+    label = t('status.sending', { count: pending }); symbol = '↑'; bg = color.primaryTint; fg = color.primary; border = '#B9DAD7';
   } else {
-    label = syncError ? 'Online · sync paused' : 'Online'; symbol = '●'; bg = color.successTint; fg = color.success; border = '#B7D9C8';
+    label = syncError ? t('status.paused') : t('status.online'); symbol = '●'; bg = color.successTint; fg = color.success; border = '#B7D9C8';
   }
   return (
-    <Pressable testID="status-pill" accessibilityRole="button" accessibilityLabel={`Connection: ${label}. Open sync status`}
+    <Pressable testID="status-pill" accessibilityRole="button" accessibilityLabel={t('status.a11y', { label })}
       onPress={() => router.push('/sync')} style={[styles.pill, { backgroundColor: bg, borderColor: border }]}>
       <Text style={{ color: fg, fontWeight: '800', fontSize: 13, fontFamily: font.family }}>{symbol}</Text>
-      <Text style={{ color: fg, fontWeight: '700', fontSize: 14, fontFamily: font.family }}>
-        {compact ? (rejected && online ? `${rejected} issue${rejected === 1 ? '' : 's'}` : `${online ? 'Online' : 'Offline'}${pending ? ` · ${pending}` : ''}`) : label}
+      <Text style={[{ color: fg, fontWeight: '700', fontSize: 14, fontFamily: font.family }, textDir()]}>
+        {compact ? (rejected && online ? tn('status.issuesShort', rejected) : `${online ? t('status.online') : t('status.offline')}${pending ? ` · ${pending}` : ''}`) : label}
       </Text>
     </Pressable>
   );
@@ -56,10 +58,11 @@ export function TopBar() {
   const showNav = !!session && !locked;
   const { width } = useWindowDimensions();
   const compact = width < 700;
+  useLang();
   return (
     <View style={[styles.bar, { paddingTop: insets.top + space.sm }, compact && { paddingHorizontal: space.md, gap: space.sm }]}>
       <Row gap={space.lg} style={{ flex: 1, minWidth: 0 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Counter – go to the till" onPress={() => showNav && router.replace('/sell')}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('topbar.home')} onPress={() => showNav && router.replace('/sell')}>
           <Logo mark={compact && showNav} />
         </Pressable>
         {shop && !compact ? (
@@ -73,12 +76,12 @@ export function TopBar() {
         {paired ? <StatusPill compact={compact} /> : null}
         {showNav ? (
           <>
-            <View style={styles.staff} accessibilityLabel={`Logged in as ${session.staff.display_name}`}>
+            <View style={styles.staff} accessibilityLabel={t('topbar.loggedInAs', { name: session.staff.display_name })}>
               <View style={styles.avatar}><Text style={styles.avatarText}>{session.staff.display_name.slice(0, 1)}</Text></View>
               {compact ? null : <T v="label" style={{ maxWidth: 140 }} numberOfLines={1}>{session.staff.display_name}</T>}
             </View>
-            {path !== '/menu' ? <BarButton label="Menu" icon="☰" onPress={() => router.push('/menu')} testID="open-menu" iconOnly={compact} /> : null}
-            <BarButton label="Lock" icon="⏻" onPress={lock} testID="lock" iconOnly={compact} />
+            {path !== '/menu' ? <BarButton label={t('topbar.menu')} icon="☰" onPress={() => router.push('/menu')} testID="open-menu" iconOnly={compact} /> : null}
+            <BarButton label={t('topbar.lock')} icon="⏻" onPress={lock} testID="lock" iconOnly={compact} />
           </>
         ) : null}
       </Row>
@@ -91,17 +94,18 @@ function BarButton({ label, icon, onPress, testID, iconOnly }: { label: string; 
     <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
       style={({ pressed }) => [styles.barBtn, iconOnly && { paddingHorizontal: 0, width: 48, justifyContent: 'center' }, pressed && { backgroundColor: color.primaryTint }]}>
       <Text style={{ fontSize: 16, color: color.ink, fontFamily: font.family }} aria-hidden>{icon}</Text>
-      {iconOnly ? null : <Text style={{ fontSize: 15, fontWeight: '700', color: color.ink, fontFamily: font.family }}>{label}</Text>}
+      {iconOnly ? null : <Text style={[{ fontSize: 15, fontWeight: '700', color: color.ink, fontFamily: font.family }, textDir()]}>{label}</Text>}
     </Pressable>
   );
 }
 
 export function TrainingBanner() {
   const training = useApp((s) => s.training && !!s.session && !s.locked);
+  useLang();
   if (!training) return null;
   return (
     <View accessibilityRole="alert" style={styles.training} testID="training-banner">
-      <Text style={styles.trainingText}>▲ TRAINING MODE – not a real sale</Text>
+      <Text style={[styles.trainingText, textDir()]}>{t('training.banner')}</Text>
     </View>
   );
 }
@@ -113,7 +117,7 @@ export function Toast() {
   return (
     <View pointerEvents="none" style={styles.toastWrap}>
       <View accessibilityLiveRegion="polite" accessibilityRole="alert" style={[styles.toast, { backgroundColor: bg }]}>
-        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15, fontFamily: font.family }}>
+        <Text style={[{ color: '#fff', fontWeight: '700', fontSize: 15, fontFamily: font.family }, textDir()]}>
           {t.tone === 'success' ? '✓ ' : t.tone === 'danger' ? '! ' : ''}{t.text}
         </Text>
       </View>

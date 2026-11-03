@@ -3,6 +3,7 @@
  * Stripe Terminal later). Only the mock exists today: it "waits for the card"
  * and approves, so the whole payment flow is testable end to end.
  */
+import { t } from './i18n';
 export interface TerminalResult {
   status: 'approved' | 'declined';
   provider: string;
@@ -24,7 +25,7 @@ export class MockTerminal implements PaymentTerminalAdapter {
 
   charge(amountPence: number, opts: { signal?: AbortSignal } = {}): Promise<TerminalResult> {
     return new Promise((resolve, reject) => {
-      const t = setTimeout(() => {
+      const timer = setTimeout(() => {
         const rnd = (n: number) => Math.floor(Math.random() * n);
         resolve({
           status: 'approved',
@@ -36,8 +37,8 @@ export class MockTerminal implements PaymentTerminalAdapter {
         });
       }, this.delayMs);
       opts.signal?.addEventListener('abort', () => {
-        clearTimeout(t);
-        reject(new Error('Card payment cancelled'));
+        clearTimeout(timer);
+        reject(new Error(t('error.cardCancelled')));
       });
     });
   }

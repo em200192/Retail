@@ -2,6 +2,7 @@ import type { LimitCode, Permission } from '@retail/shared';
 import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { ApiError, errorMessage } from '../api';
+import { LTR, t, useLang } from '../i18n';
 import { eligibleApprovers } from '../logic/permissions';
 import { api, checkPinOffline, useApp } from '../state/store';
 import { Banner, Button, Keypad, Row, Sheet, T } from './components';
@@ -26,6 +27,7 @@ export interface ApprovalResult { approverId: string; approverName: string; pin:
 export function ApprovalSheet({ request, onCancel, onApproved }: {
   request: ApprovalRequest | null; onCancel: () => void; onApproved: (r: ApprovalResult) => void;
 }) {
+  useLang();
   const staff = useApp((s) => s.catalog.staff);
   const me = useApp((s) => s.session?.staff.id ?? '');
   const [approverId, setApproverId] = useState<string | null>(null);
@@ -58,9 +60,9 @@ export function ApprovalSheet({ request, onCancel, onApproved }: {
         if (!(e instanceof ApiError && e.offline)) throw e;
         // Offline: check against this till's cached PIN verifier if the manager has logged in here before.
         const ok = await checkPinOffline(approver.id, pin);
-        if (ok === false) throw new Error('PIN is incorrect');
+        if (ok === false) throw new Error(t('error.pinIncorrect'));
         if (ok === null && !offlineNote) {
-          setOfflineNote(`Offline and ${approver.display_name} has not logged in on this till before, so the PIN can’t be checked here. Press Approve again to record the approval anyway.`);
+          setOfflineNote(t('approval.offlineUnknown', { name: approver.display_name }));
           return;
         }
         onApproved({ approverId: approver.id, approverName: approver.display_name, pin, verified: ok ? 'offline' : 'unverified' });
@@ -76,7 +78,7 @@ export function ApprovalSheet({ request, onCancel, onApproved }: {
   return (
     <Sheet visible title={request.title} onClose={onCancel} width={640} testID="approval-sheet">
       <Banner tone="warning" symbol="!" text={request.description} />
-      <T v="label">Manager: choose your name, then enter your PIN</T>
+      <T v="label">{t('approval.choose')}</T>
       <Row wrap gap={space.sm}>
         {approvers.map((a) => {
           const on = a.id === approverId;
@@ -89,11 +91,11 @@ export function ApprovalSheet({ request, onCancel, onApproved }: {
             </Pressable>
           );
         })}
-        {approvers.length === 0 ? <T muted>Nobody on this till’s staff list can approve this.</T> : null}
+        {approvers.length === 0 ? <T muted>{t('approval.nobody')}</T> : null}
       </Row>
       {approver ? (
         <View style={{ alignItems: 'center', gap: space.md }}>
-          <Row gap={12}>
+          <Row gap={12} style={LTR}>
             {Array.from({ length: Math.max(4, pin.length) }, (_, i) => (
               <View key={i} style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: color.primary, backgroundColor: i < pin.length ? color.primary : 'transparent' }} />
             ))}
@@ -104,8 +106,8 @@ export function ApprovalSheet({ request, onCancel, onApproved }: {
       {offlineNote ? <Banner tone="accent" text={offlineNote} /> : null}
       {error ? <Banner tone="danger" text={error} /> : null}
       <Row>
-        <Button kind="secondary" label="Cancel" onPress={onCancel} style={{ flex: 1 }} />
-        <Button testID="approve-confirm" label={busy ? 'Checking…' : 'Approve'} disabled={!approver || pin.length < 4 || busy} onPress={confirm} style={{ flex: 2 }} />
+        <Button kind="secondary" label={t('common.cancel')} onPress={onCancel} style={{ flex: 1 }} />
+        <Button testID="approve-confirm" label={busy ? t('common.checking') : t('approval.approve')} disabled={!approver || pin.length < 4 || busy} onPress={confirm} style={{ flex: 2 }} />
       </Row>
     </Sheet>
   );

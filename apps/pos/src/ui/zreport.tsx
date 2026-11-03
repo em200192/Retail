@@ -1,5 +1,6 @@
-import { formatGBP, VAT_LABELS } from '@retail/shared';
+import { formatGBP } from '@retail/shared';
 import { View } from 'react-native';
+import { type MessageKey, t, useLang, vatLabel } from '../i18n';
 import { Divider, Money, Row, T } from './components';
 import { color, space } from './theme';
 
@@ -17,12 +18,14 @@ export interface ZReport {
   expected_cash_pence: number;
 }
 
-const MOVES: Record<string, string> = { no_sale: 'No sales', paid_in: 'Paid in', paid_out: 'Paid out', cash_drop: 'Cash drops', float_adjust: 'Float adjustments' };
+const MOVES: Record<string, MessageKey> = {
+  no_sale: 'z.move.no_sale', paid_in: 'z.move.paid_in', paid_out: 'z.move.paid_out', cash_drop: 'z.move.cash_drop', float_adjust: 'z.move.float_adjust',
+};
 
 function Line({ l, r, strong, tone }: { l: string; r: string; strong?: boolean; tone?: string }) {
   return (
     <Row style={{ justifyContent: 'space-between' }}>
-      <T v={strong ? 'label' : 'body'} muted={!strong}>{l}</T>
+      <T v={strong ? 'label' : 'body'} muted={!strong} style={{ flexShrink: 1 }}>{l}</T>
       <Money pence={r} size={strong ? 18 : 15} tone={tone} />
     </Row>
   );
@@ -30,23 +33,24 @@ function Line({ l, r, strong, tone }: { l: string; r: string; strong?: boolean; 
 
 /** X-read / Z report summary (GET /v1/till-sessions/:id/z-report). */
 export function ZReportView({ z }: { z: ZReport }) {
+  useLang();
   return (
     <View style={{ gap: 6 }} testID="z-report">
-      <Line l={`Sales (${z.sales.count})`} r={formatGBP(z.sales.gross_pence)} />
-      <Line l="Discounts" r={`−${formatGBP(z.sales.discounts_pence)}`} />
-      <Line l="Net sales" r={formatGBP(z.sales.net_pence)} strong />
-      <Line l="of which VAT" r={formatGBP(z.sales.vat_pence)} />
+      <Line l={t('z.sales', { count: z.sales.count })} r={formatGBP(z.sales.gross_pence)} />
+      <Line l={t('z.discounts')} r={`−${formatGBP(z.sales.discounts_pence)}`} />
+      <Line l={t('z.net')} r={formatGBP(z.sales.net_pence)} strong />
+      <Line l={t('z.ofWhichVat')} r={formatGBP(z.sales.vat_pence)} />
       <Divider />
-      {Object.entries(z.payments).map(([m, v]) => <Line key={m} l={m === 'cash' ? 'Cash taken' : m === 'card' ? 'Card taken' : m} r={formatGBP(v)} />)}
-      <Line l={`Refunds (${z.refunds.count})`} r={`−${formatGBP(z.refunds.total_pence)}`} />
-      <Line l={`Voided sales (${z.voided_sales.count}) · lines (${z.voided_lines.count})`} r={formatGBP(z.voided_sales.value_pence + z.voided_lines.value_pence)} />
-      {Object.entries(z.cash_movements).map(([k, v]) => <Line key={k} l={`${MOVES[k] ?? k} (${v.count})`} r={formatGBP(v.amount_pence)} />)}
+      {Object.entries(z.payments).map(([m, v]) => <Line key={m} l={m === 'cash' ? t('z.cashTaken') : m === 'card' ? t('z.cardTaken') : m} r={formatGBP(v)} />)}
+      <Line l={t('z.refunds', { count: z.refunds.count })} r={`−${formatGBP(z.refunds.total_pence)}`} />
+      <Line l={t('z.voided', { sales: z.voided_sales.count, lines: z.voided_lines.count })} r={formatGBP(z.voided_sales.value_pence + z.voided_lines.value_pence)} />
+      {Object.entries(z.cash_movements).map(([k, v]) => <Line key={k} l={t('z.movement', { label: MOVES[k] ? t(MOVES[k]) : k, count: v.count })} r={formatGBP(v.amount_pence)} />)}
       <Divider />
-      {Object.entries(z.vat_by_code).map(([code, v]) => <Line key={code} l={`VAT ${VAT_LABELS[code] ?? code}: net ${formatGBP(v.net_pence)}`} r={formatGBP(v.vat_pence)} />)}
+      {Object.entries(z.vat_by_code).map(([code, v]) => <Line key={code} l={t('z.vat', { label: vatLabel(code), amount: formatGBP(v.net_pence) })} r={formatGBP(v.vat_pence)} />)}
       <Divider />
-      <Line l="Opening float" r={formatGBP(z.opening_float_pence)} />
+      <Line l={t('z.openingFloat')} r={formatGBP(z.opening_float_pence)} />
       <View style={{ backgroundColor: color.primaryTint, borderRadius: 10, padding: space.md, marginTop: 4 }}>
-        <Line l="Cash expected in drawer" r={formatGBP(z.expected_cash_pence)} strong tone={color.primary} />
+        <Line l={t('z.expected')} r={formatGBP(z.expected_cash_pence)} strong tone={color.primary} />
       </View>
     </View>
   );

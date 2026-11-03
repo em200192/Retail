@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Animated, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { errorMessage } from '../src/api';
+import { LTR, t, tn, useLang } from '../src/i18n';
 import { isEmpty, priceOf } from '../src/logic/basket';
 import { completeSale, runtime, toast, useApp } from '../src/state/store';
 import { terminal } from '../src/terminal';
@@ -10,6 +11,7 @@ import { applyAmountKey, Badge, Banner, Button, Card, Keypad, Money, Row, Segmen
 import { color, font, radius, space } from '../src/ui/theme';
 
 export default function Pay() {
+  useLang();
   const basket = useApp((s) => s.basket);
   const training = useApp((s) => s.training);
   const { width } = useWindowDimensions();
@@ -48,7 +50,7 @@ export default function Pay() {
       // Part payment in cash; the rest by another method (split).
       setPayments((ps) => [...ps, { id: uuidv7(), method: 'cash', amountPence: tendered, tenderedPence: tendered, changePence: 0, occurredAt: now }]);
       setTyped('');
-      toast(`${formatGBP(tendered)} cash taken · ${formatGBP(remaining - tendered)} left to pay`);
+      toast(t('pay.cashPart', { amount: formatGBP(tendered), left: formatGBP(remaining - tendered) }));
     }
   };
 
@@ -61,14 +63,14 @@ export default function Pay() {
     abort.current = new AbortController();
     try {
       const r = await terminal.charge(amount, { signal: abort.current.signal });
-      if (r.status !== 'approved') throw new Error(r.message ?? 'Card declined');
+      if (r.status !== 'approved') throw new Error(r.message ?? t('error.cardDeclined'));
       const p: PaymentInput = { id: uuidv7(), method: 'card', amountPence: amount, provider: r.provider, providerTxnRef: r.providerTxnRef,
         cardBrand: r.cardBrand, cardLast4: r.cardLast4, authCode: r.authCode, occurredAt: new Date().toISOString() };
       const all = [...payments, p];
       setPayments(all);
       setTyped('');
       if (amount === remaining) await finish(all);
-      else toast(`Card approved ${formatGBP(amount)} · ${formatGBP(remaining - amount)} left`, 'success');
+      else toast(t('pay.cardPart', { amount: formatGBP(amount), left: formatGBP(remaining - amount) }), 'success');
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -83,64 +85,64 @@ export default function Pay() {
   return (
     <ScrollView contentContainerStyle={{ padding: space.xl, gap: space.lg, maxWidth: 1180, width: '100%', alignSelf: 'center' }}>
       <Row style={{ justifyContent: 'space-between' }} wrap>
-        <Button kind="ghost" label="← Back to basket" onPress={() => router.back()} disabled={payments.length > 0 || cardBusy || busy} />
-        {training ? <Badge label="Training sale" tone="accent" symbol="▲" /> : null}
+        <Button kind="ghost" label={t('pay.back')} onPress={() => router.back()} disabled={payments.length > 0 || cardBusy || busy} />
+        {training ? <Badge label={t('pay.trainingSale')} tone="accent" symbol="▲" /> : null}
       </Row>
       <View style={{ flexDirection: wide ? 'row' : 'column', gap: space.lg }}>
         <Card style={{ flex: wide ? 1 : undefined, gap: space.md, padding: space.xl }}>
-          <T v="caption" muted>{payments.length ? 'Left to pay' : 'To pay'}</T>
+          <T v="caption" muted>{payments.length ? t('pay.leftToPay') : t('pay.toPay')}</T>
           <Money pence={formatGBP(Math.max(remaining, 0))} size={72} />
-          <T muted>{formatGBP(totals.total)} total · {totals.items} item{totals.items === 1 ? '' : 's'} · VAT {formatGBP(totals.vat)}</T>
+          <T muted>{tn('pay.summary', totals.items, { total: formatGBP(totals.total), vat: formatGBP(totals.vat) })}</T>
           {payments.length ? (
             <View style={{ gap: 6, marginTop: space.sm }}>
-              <T v="label">Paid so far</T>
+              <T v="label">{t('pay.paidSoFar')}</T>
               {payments.map((p) => (
                 <Row key={p.id} style={{ justifyContent: 'space-between' }}>
-                  <T>{p.method === 'card' ? `✓ Card ${p.cardBrand ?? ''} •••• ${p.cardLast4 ?? ''}` : '✓ Cash'}</T>
+                  <T>{p.method === 'card' ? t('pay.paidCard', { card: `${p.cardBrand ?? ''} •••• ${p.cardLast4 ?? ''}`.trim() }) : t('pay.paidCash')}</T>
                   <Money pence={formatGBP(p.amountPence)} />
                 </Row>
               ))}
             </View>
           ) : null}
           {error ? <Banner tone="danger" text={error} /> : null}
-          {totals.total === 0 ? <Button label="Complete sale (nothing to pay)" size="xl" onPress={() => finish([])} disabled={busy} /> : null}
+          {totals.total === 0 ? <Button label={t('pay.completeFree')} size="xl" onPress={() => finish([])} disabled={busy} /> : null}
         </Card>
 
         <Card style={{ flex: wide ? 1.3 : undefined, gap: space.lg, padding: space.xl }}>
-          <Segmented label="Payment method" value={method} onChange={(m) => { setMethod(m); setTyped(''); }}
-            options={[{ value: 'cash', label: 'Cash' }, { value: 'card', label: 'Card' }]} />
+          <Segmented label={t('pay.method')} value={method} onChange={(m) => { setMethod(m); setTyped(''); }}
+            options={[{ value: 'cash', label: t('common.cash') }, { value: 'card', label: t('common.card') }]} />
           {cardBusy ? <PresentCard amount={typedPence > 0 ? Math.min(typedPence, remaining) : remaining} onCancel={() => abort.current?.abort()} /> : method === 'cash' ? (
             <View style={{ gap: space.md }}>
-              <T v="label">Cash tendered</T>
+              <T v="label">{t('pay.cashTendered')}</T>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
                 {quick.map((v, i) => (
-                  <Button key={v} testID={`cash-${v}`} kind={i === 0 ? 'primary' : 'secondary'} size="xl" label={i === 0 ? `Exact ${formatGBP(v)}` : formatGBP(v)}
+                  <Button key={v} testID={`cash-${v}`} kind={i === 0 ? 'primary' : 'secondary'} size="xl" label={i === 0 ? t('pay.exact', { amount: formatGBP(v) }) : formatGBP(v)}
                     onPress={() => takeCash(v)} disabled={busy} style={{ flexBasis: '47%', flexGrow: 1 }} />
                 ))}
               </View>
               <Row gap={space.lg} wrap style={{ alignItems: 'flex-start' }}>
                 <View style={{ flex: 1, minWidth: 200, gap: space.sm }}>
-                  <T muted>Other amount</T>
+                  <T muted>{t('pay.otherAmount')}</T>
                   <Money pence={formatGBP(typedPence)} size={40} />
                   {typedPence > 0 ? (
                     <T v="label" tone={typedPence >= remaining ? color.success : color.warning}>
-                      {typedPence >= remaining ? `Change ${formatGBP(typedPence - remaining)}` : `Part payment — ${formatGBP(remaining - typedPence)} still to pay`}
+                      {typedPence >= remaining ? t('pay.change', { amount: formatGBP(typedPence - remaining) }) : t('pay.partPayment', { amount: formatGBP(remaining - typedPence) })}
                     </T>
                   ) : null}
-                  <Button label={typedPence >= remaining ? 'Take cash' : 'Take part payment'} size="lg" disabled={typedPence <= 0 || busy} onPress={() => takeCash(typedPence)} />
+                  <Button label={typedPence >= remaining ? t('pay.takeCash') : t('pay.takePart')} size="lg" disabled={typedPence <= 0 || busy} onPress={() => takeCash(typedPence)} />
                 </View>
                 <Keypad size={64} testIDPrefix="cash" keys={['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', '⌫']} onKey={(k) => setTyped((t) => applyAmountKey(t, k, 7))} />
               </Row>
             </View>
           ) : (
             <View style={{ gap: space.md }}>
-              <T muted>Card terminal: {terminal.name === 'mock' ? 'demo terminal (simulated)' : terminal.name}</T>
+              <T muted>{t('pay.terminal', { name: terminal.name === 'mock' ? t('pay.terminalMock') : terminal.name })}</T>
               <Row gap={space.lg} wrap style={{ alignItems: 'flex-start' }}>
                 <View style={{ flex: 1, minWidth: 200, gap: space.sm }}>
-                  <T muted>Amount on card</T>
+                  <T muted>{t('pay.amountOnCard')}</T>
                   <Money pence={formatGBP(typedPence > 0 ? Math.min(typedPence, remaining) : remaining)} size={40} />
-                  <T v="small" muted>Type a smaller amount to split the payment.</T>
-                  <Button testID="card-charge" label="Charge card" size="xl" onPress={takeCard} disabled={busy || remaining <= 0} />
+                  <T v="small" muted>{t('pay.splitHint')}</T>
+                  <Button testID="card-charge" label={t('pay.chargeCard')} size="xl" onPress={takeCard} disabled={busy || remaining <= 0} />
                 </View>
                 <Keypad size={64} testIDPrefix="card" keys={['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', '⌫']} onKey={(k) => setTyped((t) => applyAmountKey(t, k, 7))} />
               </Row>
@@ -153,6 +155,7 @@ export default function Pay() {
 }
 
 function PresentCard({ amount, onCancel }: { amount: number; onCancel: () => void }) {
+  useLang();
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     let loop: Animated.CompositeAnimation | null = null;
@@ -169,13 +172,13 @@ function PresentCard({ amount, onCancel }: { amount: number; onCancel: () => voi
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
   return (
     <View accessibilityLiveRegion="polite" style={{ alignItems: 'center', gap: space.lg, paddingVertical: space.xl }}>
-      <Animated.View style={{ transform: [{ scale }], width: 180, height: 116, borderRadius: radius.lg, backgroundColor: color.primary, padding: space.lg, justifyContent: 'space-between' }}>
+      <Animated.View style={{ ...LTR, transform: [{ scale }], width: 180, height: 116, borderRadius: radius.lg, backgroundColor: color.primary, padding: space.lg, justifyContent: 'space-between' }}>
         <View style={{ width: 36, height: 26, borderRadius: 6, backgroundColor: color.accent }} />
         <Text style={{ color: '#fff', fontSize: 16, letterSpacing: 2, fontFamily: font.family }}>•••• •••• ••••</Text>
       </Animated.View>
-      <T v="title">Present card…</T>
-      <Row><ActivityIndicator color={color.primary} /><T muted>Waiting for the terminal · {formatGBP(amount)}</T></Row>
-      <Button kind="secondary" label="Cancel card payment" onPress={onCancel} />
+      <T v="title">{t('pay.presentCard')}</T>
+      <Row><ActivityIndicator color={color.primary} /><T muted>{t('pay.waiting', { amount: formatGBP(amount) })}</T></Row>
+      <Button kind="secondary" label={t('pay.cancelCard')} onPress={onCancel} />
     </View>
   );
 }
