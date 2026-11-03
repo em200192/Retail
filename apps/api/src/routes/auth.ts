@@ -180,10 +180,14 @@ export async function authRoutes(app: FastifyInstance, deps: Deps) {
           AND (r.system_key = 'owner' OR EXISTS (SELECT 1 FROM staff_branch_access a
                WHERE a.tenant_id = s.tenant_id AND a.staff_id = s.id AND a.branch_id = ${device.branch_id}))
         ORDER BY s.display_name`;
+      // A re-paired / reinstalled till carries on numbering after its last synced receipt.
+      const [seq] = await tx<{ last_seq: number }[]>`
+        SELECT COALESCE(max(split_part(receipt_number, '-', 3)::bigint), 0) AS last_seq
+        FROM sales WHERE tenant_id = ${tid} AND device_id = ${device.id} AND receipt_number ~ '^[A-Za-z0-9]+-[0-9]+-[0-9]+$'`;
       await tx`UPDATE devices SET last_seen_at = now() WHERE tenant_id = ${tid} AND id = ${device.id}`;
       return {
         tenant, branch, till: till ?? null, staff,
-        device: { id: device.id, device_no: device.device_no, name: device.name, kind: device.kind },
+        device: { id: device.id, device_no: device.device_no, name: device.name, kind: device.kind, last_receipt_seq: seq?.last_seq ?? 0 },
       };
     });
     if (!out) throw unauthorized('Device is not registered');

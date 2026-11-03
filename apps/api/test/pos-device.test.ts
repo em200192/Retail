@@ -1,6 +1,6 @@
 import { uuidv7 } from '@retail/shared';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { client, type Client, newShop, type Shop, useTestApp } from './helpers.ts';
+import { buildSale, client, type Client, mkProduct, newShop, type Shop, useTestApp } from './helpers.ts';
 
 const env = useTestApp();
 
@@ -42,6 +42,16 @@ describe('device hello (till start-up before login)', () => {
     expect(pull.tills.find((t: any) => t.id === shop.tillId).open_session_id).toBe(s.body.id);
     expect(pull.tenant.trading_name).toMatch(/Corner Shop/);
     expect(pull.branch.postcode).toBe('M1 1AA');
+  });
+
+  it('tells a re-paired till the last receipt sequence it used', async () => {
+    const hello = () => client(env.app).post('/v1/devices/hello', { device_id: shop.deviceId, device_secret: shop.deviceSecret });
+    expect((await hello()).body.device.last_receipt_seq).toBe(0);
+    const milk = await mkProduct(shop.owner, { name: 'Milk', price: 165, vat: 'Z' });
+    const sale = buildSale(shop, shop.cashierId, [{ productId: milk, qty: 1, unitPrice: 165, vatCode: 'Z' }]);
+    sale.receipt_number = `DEV1-${shop.deviceNo}-41`;
+    expect((await sam.post('/v1/sync/push', { sales: [sale] })).body.sales[0].status).toBe('created');
+    expect((await hello()).body.device.last_receipt_seq).toBe(41);
   });
 });
 
