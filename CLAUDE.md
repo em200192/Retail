@@ -209,6 +209,11 @@ apps/pos/             Expo (React Native) till & staff app, also runs on web. Of
 - Plain-English, GOV.UK-style copy and error messages ("Enter a real UK postcode, like M14 6LE").
 - The till builds sales ONLY with `buildSalePayload()`; never re-implement sale arithmetic.
 - React is pinned to exactly 19.0.0 across web and pos (one copy in the workspace).
+- **Languages: English + Arabic (RTL).** Web: `t('English text', vars)` from `@/lib/i18n` (English is the key,
+  Arabic in `lib/i18n/ar.ts`, missing keys collect in `window.__i18nMissing`); use logical Tailwind classes
+  (`ps/pe/ms/me/start/end`), keep money/keypads/receipts `dir="ltr"`, dates from `@/lib/format` (Latin digits).
+  POS: keyed dictionaries in `apps/pos/src/i18n` (`en.ts` source of truth, `ar.ts`), `t()/tn()` + `useLang()`.
+  Values sent to the API (reason codes etc.) stay English. Customer receipt is English unless set otherwise.
 
 ## Commands
 
@@ -245,6 +250,10 @@ npm run dev / npm run worker / npm run web (:3001) / npm run pos (Expo web)
 - Weighed goods: price lookups use `max(qty, 1)` for quantity breaks.
 - OCR matching: supplier code (1.0) > barcode (0.97) > fuzzy name (capped at 0.85, so a human always
   confirms). Posting saves supplier code -> product with `match_source = 'ocr_confirmed'`.
+- OCR instructions are shared (`packages/shared/src/invoice-ocr.ts`): money ex VAT in pence, wholesaler VAT letters
+  (Booker A = Z, B = S; Parfetts A = S), PMP/RRP (`rrp_pence`, migration 012), void notes kept as negative lines.
+  Posting nets quantities per product. Unknown lines -> `POST /v1/invoices/:id/lines/:lineId/create-product` or
+  `/create-missing-products` (name from `productNameFromInvoice`, price = PMP else RRP).
 - Money is `number` of pence in TS (int8 parsed with a safe-integer check); DATE columns stay strings.
 
 ## Status

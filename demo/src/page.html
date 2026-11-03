@@ -185,6 +185,7 @@ dialog.tips::backdrop { background: rgb(15 23 42 / .5); }
     if (window.__counterSetLanguage) window.__counterSetLanguage(l);
   }
   window.__onOfficeLang = function (l) { if (l !== lang) { lang = l; try { localStorage.setItem('counter.lang', l); } catch (e) {} applyBar(); if (window.__counterSetLanguage) window.__counterSetLanguage(l); } };
+  window.__onTillLang = function (l) { if (l !== lang) { lang = l; try { localStorage.setItem('counter.lang', l); } catch (e) {} applyBar(); if (window.__officeLang && window.__officeLang.lang !== l) window.__officeLang.setLang(l); } };
   window.__demoLang = function () { return lang; };
   document.getElementById('lang-en').onclick = function () { setLang('en'); };
   document.getElementById('lang-ar').onclick = function () { setLang('ar'); };

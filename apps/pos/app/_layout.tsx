@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { dirStyle, t, useLang } from '../src/i18n';
+import { dirStyle, setLanguage, t, useLang, type Lang } from '../src/i18n';
 import { boot, getState, lock, runtime, startBackgroundSync, useApp } from '../src/state/store';
 import { Toast, TopBar, TrainingBanner } from '../src/ui/chrome';
 import { color, WEB_CSS } from '../src/ui/theme';
@@ -29,8 +29,20 @@ export default function RootLayout() {
   const lang = useLang();
 
   useEffect(() => {
-    void boot().then(startBackgroundSync);
+    void boot().then(() => {
+      startBackgroundSync();
+      // Hosted preview only (demo page): follow the page's language switch.
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const w = window as unknown as { __counterSetLanguage?: (l: Lang) => void; __demoLang?: () => Lang };
+        w.__counterSetLanguage = setLanguage;
+        const want = w.__demoLang?.();
+        if (want) setLanguage(want);
+      }
+    });
   }, []);
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') (window as unknown as { __onTillLang?: (l: Lang) => void }).__onTillLang?.(lang);
+  }, [lang]);
 
   // Route guard: pair -> PIN -> till.
   useEffect(() => {
