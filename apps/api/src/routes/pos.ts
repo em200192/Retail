@@ -34,6 +34,28 @@ export async function posRoutes(app: FastifyInstance, deps: Deps) {
     return reply.status(out.created ? 201 : 200).send(out.session);
   });
 
+  app.get('/v1/till-sessions', async (req) => {
+    const q = parse(z.object({ branch_id: uuid, status: z.enum(['open', 'closed']).optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50) }), req.query);
+    return tenantTx(deps, req, async ({ tx, actor }) => {
+      requireBranchAccess(actor, q.branch_id);
+      requirePermission(actor, 'pos.z_report');
+      return tx`
+        SELECT s.id, s.till_id, t.name AS till_name, s.status, s.opened_at, s.closed_at, s.opening_float_pence,
+               s.expected_cash_pence, s.counted_cash_pence, s.variance_pence,
+               o.display_name AS opened_by_name, c.display_name AS closed_by_name,
+               (s.z_report->'sales'->>'net_pence')::bigint AS net_sales_pence
+        FROM till_sessions s JOIN tills t ON t.tenant_id = s.tenant_id AND t.id = s.till_id
+        JOIN staff o ON o.tenant_id = s.tenant_id AND o.id = s.opened_by
+        LEFT JOIN staff c ON c.tenant_id = s.tenant_id AND c.id = s.closed_by
+        WHERE s.branch_id = ${q.branch_id} ${q.status ? tx`AND s.status = ${q.status}` : tx``}
+        ORDER BY s.opened_at DESC LIMIT ${q.limit}`;
+    });
+  });
+
+  app.get('/v1/expense-categories', async (req) =>
+    tenantTx(deps, req, async ({ tx }) => tx`SELECT id, name, vat_reclaimable FROM expense_categories WHERE is_active ORDER BY name`));
+
   app.get('/v1/till-sessions/:id', async (req) => {
     const { id } = parse(idParam, req.params);
     return tenantTx(deps, req, async ({ tx, actor }) => {

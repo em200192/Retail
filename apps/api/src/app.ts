@@ -1,3 +1,4 @@
+import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import type { Config } from './config.ts';
 import { type Actor, loadActor } from './lib/authz.ts';
@@ -62,9 +63,10 @@ export function requirePosToken(req: FastifyRequest): Required<Pick<TokenClaims,
 export async function buildApp(deps: Deps, opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 5 * 1024 * 1024 });
 
+  await app.register(cors, { origin: deps.config.corsOrigins, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
   app.decorateRequest('auth', null);
   app.addHook('onRequest', async (req) => {
-    if (req.routeOptions.config?.public) return;
+    if (req.method === 'OPTIONS' || req.routeOptions.config?.public) return;
     const header = req.headers.authorization;
     const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
     const claims = token ? verifyToken(token, deps.config.jwtSecret) : null;

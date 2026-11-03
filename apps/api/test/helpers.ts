@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { apportion, formatReceiptNumber, lineAmount, uuidv7, vatFromGross } from '@retail/shared';
+import { type BasketLine, buildSalePayload, formatReceiptNumber, priceBasket, uuidv7 } from '@retail/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll } from 'vitest';
 import { buildApp } from '../src/app.ts';
@@ -106,55 +106,41 @@ export interface LineSpec {
 }
 
 /**
- * Builds a sale exactly the way the POS device does offline: UUIDv7 ids,
- * receipt number, shared rounding for line totals and VAT, basket discount
- * apportioned over the lines, payments that add up.
+ * Builds a sale exactly the way the POS device does offline — through the
+ * shared buildSalePayload() the till app uses.
  */
 export function buildSale(shop: Shop, staffId: string, lines: LineSpec[], opts: {
   tillSessionId?: string | null; isTraining?: boolean; basketDiscount?: number; method?: 'cash' | 'card';
-  discounts?: unknown[]; approvals?: unknown[]; ageChecks?: unknown[]; customerId?: string; at?: Date;
+  discounts?: any[]; approvals?: any[]; ageChecks?: any[]; customerId?: string; at?: Date;
 } = {}) {
   const at = (opts.at ?? new Date()).toISOString();
   const rates: Record<string, number> = { S: 20, R: 5, Z: 0, E: 0 };
-  const built = lines.map((l, i) => ({ l, i, base: lineAmount(l.unitPrice, l.qty) }));
-  const live = built.filter((b) => !b.l.voidedBy);
-  const basketShares = opts.basketDiscount ? apportion(opts.basketDiscount, live.map((b) => b.base - (b.l.lineDiscount ?? 0))) : [];
-  let liveIdx = 0;
-  const saleLines = built.map(({ l, i, base }) => {
-    const share = l.voidedBy ? 0 : (basketShares[liveIdx++] ?? 0);
-    const lineDiscount = (l.lineDiscount ?? 0) + share;
-    const total = base - lineDiscount;
-    const code = l.vatCode ?? 'S';
-    return {
-      id: uuidv7(), line_no: i + 1, product_id: l.productId ?? null, barcode_scanned: l.barcode ?? null,
-      description: l.description ?? `Item ${i + 1}`, quantity: l.qty, unit_price_pence: l.unitPrice,
-      is_pmp: l.pmpPrice !== undefined, pmp_price_pence: l.pmpPrice ?? null, line_discount_pence: lineDiscount,
-      promotion_discount_pence: 0, line_total_pence: total, vat_code: code, vat_rate_percent: rates[code]!,
-      vat_pence: vatFromGross(total, rates[code]!), age_check_id: l.ageCheckId ?? null,
-      is_voided: !!l.voidedBy, voided_by: l.voidedBy ?? null, void_reason: l.voidedBy ? 'Customer changed mind' : null,
-    };
-  });
-  const liveLines = saleLines.filter((l) => !l.is_voided);
-  const subtotal = liveLines.reduce((a, l) => a + lineAmount(l.unit_price_pence, l.quantity), 0);
-  const discount = liveLines.reduce((a, l) => a + l.line_discount_pence, 0);
-  const total = liveLines.reduce((a, l) => a + l.line_total_pence, 0);
-  const vat = liveLines.reduce((a, l) => a + l.vat_pence, 0);
+  const basket: BasketLine[] = lines.map((l, i) => ({
+    id: uuidv7(), productId: l.productId ?? null, description: l.description ?? `Item ${i + 1}`, barcode: l.barcode ?? null,
+    quantity: l.qty, unitPricePence: l.unitPrice, vatCode: l.vatCode ?? 'S', vatRatePercent: rates[l.vatCode ?? 'S']!,
+    isPmp: l.pmpPrice !== undefined, pmpPricePence: l.pmpPrice ?? null, lineDiscountPence: l.lineDiscount ?? 0,
+    ageCheckId: l.ageCheckId ?? null, voidedBy: l.voidedBy ?? null, voidReason: l.voidedBy ? 'Customer changed mind' : null,
+  }));
+  const total = priceBasket(basket, opts.basketDiscount ?? 0).totals.total;
   receiptSeq++;
   const method = opts.method ?? 'cash';
-  return {
-    id: uuidv7(), till_session_id: opts.tillSessionId ?? null, staff_id: staffId, customer_id: opts.customerId ?? null,
-    receipt_number: formatReceiptNumber(shop.branchCode, shop.deviceNo, receiptSeq), status: 'completed' as const,
-    is_training: opts.isTraining ?? false, subtotal_pence: subtotal, discount_pence: discount, total_pence: total, vat_pence: vat,
-    started_at: at, completed_at: at,
-    lines: saleLines,
+  const tendered = method === 'cash' ? Math.ceil(total / 500) * 500 : null;
+  const payload = buildSalePayload({
+    id: uuidv7(), receiptNumber: formatReceiptNumber(shop.branchCode, shop.deviceNo, receiptSeq), staffId,
+    tillSessionId: opts.tillSessionId ?? null, customerId: opts.customerId ?? null, isTraining: opts.isTraining ?? false,
+    lines: basket, basketDiscountPence: opts.basketDiscount ?? 0, startedAt: at, completedAt: at,
     payments: total > 0 ? [{
-      id: uuidv7(), method, amount_pence: total, tendered_pence: method === 'cash' ? Math.ceil(total / 500) * 500 : null,
-      change_pence: method === 'cash' ? Math.ceil(total / 500) * 500 - total : null, status: 'approved', occurred_at: at,
-      ...(method === 'card' ? { provider: 'dojo', provider_txn_ref: `txn-${receiptSeq}`, card_brand: 'visa', card_last4: '4242' } : {}),
+      id: uuidv7(), method, amountPence: total, tenderedPence: tendered, changePence: tendered !== null ? tendered - total : null,
+      occurredAt: at,
+      ...(method === 'card' ? { provider: 'dojo', providerTxnRef: `txn-${receiptSeq}`, cardBrand: 'visa', cardLast4: '4242' } : {}),
     }] : [],
-    discounts: opts.discounts ?? [],
-    approvals: opts.approvals ?? [],
-    age_checks: opts.ageChecks ?? [],
+  });
+  // Tests pass raw wire-format discounts/approvals/age checks to probe the server rules.
+  return {
+    ...payload,
+    discounts: (opts.discounts ?? []) as any[],
+    approvals: (opts.approvals ?? []) as any[],
+    age_checks: (opts.ageChecks ?? []) as any[],
   };
 }
 
