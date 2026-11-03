@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 /** Thin HTTP client for the Counter API (/v1). Network failures become ApiError status 0. */
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, message: string, readonly details?: unknown) {
@@ -26,7 +28,7 @@ export async function apiRequest<T>(base: string, method: string, path: string, 
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new ApiError(0, 'offline', 'No connection to the server');
+    throw new ApiError(0, 'offline', t('error.noConnection'));
   } finally {
     clearTimeout(timer);
   }
@@ -37,12 +39,13 @@ export async function apiRequest<T>(base: string, method: string, path: string, 
   } catch { /* not JSON */ }
   if (!res.ok) {
     const e = (json ?? {}) as { error?: string; message?: string; details?: unknown };
-    throw new ApiError(res.status, e.error ?? 'error', e.message ?? `Request failed (${res.status})`, e.details);
+    // Server messages are shown as the server wrote them (English); only our own fallback is translated.
+    throw new ApiError(res.status, e.error ?? 'error', e.message ?? t('error.requestFailed', { status: res.status }), e.details);
   }
   return json as T;
 }
 
 export function errorMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.offline ? 'Offline — this needs a connection to the server.' : err.message;
+  if (err instanceof ApiError) return err.offline ? t('error.offline') : err.message;
   return err instanceof Error ? err.message : String(err);
 }

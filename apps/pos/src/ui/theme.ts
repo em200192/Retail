@@ -28,7 +28,9 @@ export const touch = { min: 48, till: 64 } as const;
 
 export const font = {
   family: Platform.select({
-    web: 'Inter, "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif',
+    // Arabic: Segoe UI (Windows) has it; "IBM Plex Sans Arabic" is loaded when Arabic is chosen
+    // (see i18n); the rest are offline fallbacks (macOS/iOS Geeza Pro, Android/Linux Noto, Tahoma).
+    web: 'Inter, "Segoe UI", "IBM Plex Sans Arabic", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, "Noto Sans Arabic", "Geeza Pro", Tahoma, "DejaVu Sans", sans-serif',
     default: undefined,
   }),
 };

@@ -12,6 +12,7 @@ import { decodePairingCode, type Pairing } from '../logic/pairing';
 import type { PushResponse } from '../logic/queue';
 import { SyncQueue } from '../logic/queue';
 import type { RefundPayload } from '../logic/refund';
+import { loadLanguage, t } from '../i18n';
 import { kv } from '../storage/kv';
 import { createQueueStore } from '../storage/queueStore';
 import { secure, sha256Hex } from '../storage/secure';
@@ -96,7 +97,7 @@ export function toast(text: string, tone: 'success' | 'danger' | 'neutral' = 'ne
 
 // ------------------------------------------------------------------ API helpers
 function base(): string {
-  if (!state.pairing) throw new Error('This till is not paired');
+  if (!state.pairing) throw new Error(t('error.notPaired'));
   return state.pairing.api;
 }
 
@@ -122,6 +123,7 @@ async function syncToken(): Promise<string | null> {
 
 // ------------------------------------------------------------------ boot & pairing
 export async function boot() {
+  await loadLanguage();
   const raw = await secure.get('pairing');
   const pairing = raw ? (JSON.parse(raw) as Pairing) : null;
   const restored: Partial<AppState> = {};
@@ -200,8 +202,8 @@ export async function login(staffId: string, pin: string): Promise<Session> {
   } catch (err) {
     if (!(err instanceof ApiError) || !err.offline) throw err;
     const cached = await secure.get(pinKey(staffId));
-    if (!cached) throw new Error('Offline: this person has not logged in on this till before, so their PIN cannot be checked.');
-    if (cached !== (await verifier(staffId, pin))) throw new Error('PIN is incorrect');
+    if (!cached) throw new Error(t('error.offlineUnknownStaff'));
+    if (cached !== (await verifier(staffId, pin))) throw new Error(t('error.pinIncorrect'));
     token = await secure.get(`token.${staffId}`);
     offline = true;
     setState({ online: false });
@@ -214,7 +216,7 @@ export async function login(staffId: string, pin: string): Promise<Session> {
   const staff = state.catalog.staff.find((s) => s.id === staffId);
   if (!staff) {
     setState({ session: null });
-    throw new Error('Your permissions have not been downloaded to this till yet. Connect to the internet and try again.');
+    throw new Error(t('error.noPermissions'));
   }
   const full = { ...session, staff };
   setState({ session: full, training: state.training && staff.permissions.includes('pos.training_mode') });
@@ -257,7 +259,7 @@ async function adoptOpenTillSession() {
 
 export async function openTill(openingFloatPence: number): Promise<TillSessionInfo> {
   const tillId = state.hello?.till?.id;
-  if (!tillId) throw new Error('No till is linked to this device. Link one in the back office.');
+  if (!tillId) throw new Error(t('error.noTillLinked'));
   const id = uuidv7();
   try {
     const s = await api<{ id: string; opened_at: string; opening_float_pence: number }>('POST', '/v1/till-sessions',
@@ -288,7 +290,7 @@ async function nextReceiptNumber(): Promise<string> {
   const c = state.catalog;
   const branchCode = c.branch?.code ?? state.hello?.branch.code;
   const deviceNo = c.device?.device_no ?? state.hello?.device.device_no;
-  if (!branchCode || !deviceNo) throw new Error('This till has no branch code / device number yet');
+  if (!branchCode || !deviceNo) throw new Error(t('error.noBranchCode'));
   const seq = ((await kv.get<number>('receipt_seq')) ?? 0) + 1;
   await kv.set('receipt_seq', seq);            // persisted BEFORE use: numbers only ever go up
   return formatReceiptNumber(branchCode, deviceNo, seq);
@@ -311,7 +313,7 @@ export function shopHeader(): Receipt['shop'] {
  */
 export async function completeSale(payments: PaymentInput[]): Promise<Receipt> {
   const s = state.session;
-  if (!s) throw new Error('Nobody is logged in');
+  if (!s) throw new Error(t('error.nobodyLoggedIn'));
   const b = state.basket;
   const receiptNumber = await nextReceiptNumber();
   const completedAt = new Date().toISOString();
@@ -332,7 +334,7 @@ export async function completeSale(payments: PaymentInput[]): Promise<Receipt> {
 /** Cancels the basket as a voided sale (kept for loss prevention, never charged, no stock moves). */
 export async function voidSale(voidedBy: string, reason: string, approval?: ApprovalRecord) {
   const s = state.session;
-  if (!s) throw new Error('Nobody is logged in');
+  if (!s) throw new Error(t('error.nobodyLoggedIn'));
   const b = state.basket;
   const receiptNumber = await nextReceiptNumber();
   const now = new Date().toISOString();
