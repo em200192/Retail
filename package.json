@@ -1,0 +1,19 @@
+{
+  "name": "retail-saas",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "db:migrate": "./db/migrate.sh",
+    "db:setup-dev": "./db/setup-dev.sh",
+    "dev": "npm -w @retail/api run dev",
+    "worker": "npm -w @retail/api run worker",
+    "typecheck": "npm -w @retail/shared run typecheck && npm -w @retail/api run typecheck",
+    "test": "npm -w @retail/shared test && npm -w @retail/api test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2",
+    "vitest": "^3.0.5"
+  }
+}
