@@ -7,11 +7,12 @@ import { type BasketLine, buildSalePayload, daysAgoUK, formatReceiptNumber, pric
 import { buildApp } from '../src/app.ts';
 import { loadConfig } from '../src/config.ts';
 import { createPool, Db } from '../src/lib/db.ts';
+import { LocalFileStore } from '../src/integrations/files.ts';
 import { refreshDailySummaries } from '../src/worker/jobs.ts';
 
 const config = loadConfig();
 const db = new Db(createPool(config.databaseUrl), createPool(config.workerDatabaseUrl));
-const app = await buildApp({ db, config });
+const app = await buildApp({ db, config, files: new LocalFileStore(process.env.FILE_STORE_DIR ?? './.files') });
 const apiUrl = process.env.PUBLIC_API_URL ?? `http://localhost:${config.port}`;
 
 async function call(method: string, url: string, token: string | null, payload?: unknown) {
@@ -116,12 +117,6 @@ for (const [i, p] of products.entries()) {
     pack_size: pack, case_cost_pence: p.cost * pack, is_preferred: true });
 }
 
-// Opening stock 3 weeks ago, with expiry dates for chilled & bakery.
-const inDays = (d: number) => new Date(Date.now() + d * 86400000).toISOString().slice(0, 10);
-await call('POST', '/v1/stock/receipts', T, { branch_id: branchId, opening: true, lines: products.map((p, i) => ({
-  product_id: p.id, quantity: Math.round(p.weekly * 2.6) + 5, unit_cost_pence: p.cost,
-  expiry_date: i < 8 || i === 23 || i === 27 ? inDays(i % 4 === 0 ? 1 : i % 4 === 1 ? 2 : 6) : null })) });
-
 // Register the till.
 const dev = await call('POST', '/v1/devices', T, { branch_id: branchId, name: 'Front till', kind: 'pos', platform: 'ipad', create_till: true });
 const pinLogin = async (staffId: string, pin: string) => (await call('POST', '/v1/auth/pin-login', null, {
@@ -168,6 +163,17 @@ for (let day = 13; day >= 0; day--) {
     }));
   }
 }
+// Opening stock sized from what the two weeks will sell, leaving a realistic
+// spread: most lines comfortable, a handful at or under their reorder point.
+const inDays = (d: number) => new Date(Date.now() + d * 86400000).toISOString().slice(0, 10);
+const soldQty = new Map<string, number>();
+for (const s of sales) for (const l of s.lines) soldQty.set(l.product_id!, (soldQty.get(l.product_id!) ?? 0) + l.quantity);
+await call('POST', '/v1/stock/receipts', T, { branch_id: branchId, opening: true, lines: catalogue.map((c, i) => {
+  const p = products[i]!;
+  const leftover = i % 7 === 3 ? Math.floor(c[6] * 0.5) : c[6] + Math.round(c[7] * (0.4 + rnd()));
+  return { product_id: p.id, quantity: (soldQty.get(p.id) ?? 0) + leftover, unit_cost_pence: p.cost,
+    expiry_date: i < 8 || i === 23 || i === 27 ? inDays(i % 4 === 0 ? 1 : i % 4 === 1 ? 2 : 6) : null };
+}) });
 for (let i = 0; i < sales.length; i += 200) {
   const r = await call('POST', '/v1/sync/push', samToken, { sales: sales.slice(i, i + 200) });
   const rejected = r.sales.filter((s: any) => s.status === 'rejected');

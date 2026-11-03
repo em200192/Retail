@@ -7,7 +7,9 @@
     "db:setup-dev": "./db/setup-dev.sh",
     "dev": "npm -w @retail/api run dev",
     "worker": "npm -w @retail/api run worker",
-    "typecheck": "npm -w @retail/shared run typecheck && npm -w @retail/api run typecheck",
+    "typecheck": "npm -w @retail/shared run typecheck && npm -w @retail/api run typecheck && npm -w @retail/web run typecheck",
+    "web": "npm -w @retail/web run dev",
+    "seed:demo": "npm -w @retail/api run seed:demo",
     "test": "npm -w @retail/shared test && npm -w @retail/api test"
   },
   "devDependencies": {

@@ -1,0 +1,27 @@
+{
+  "name": "@retail/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@retail/shared": "*",
+    "lucide-react": "0.511.0",
+    "next": "15.3.9",
+    "qrcode": "1.5.4",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "swr": "2.3.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.1.18",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "19.0.10",
+    "@types/react-dom": "19.0.4",
+    "tailwindcss": "4.1.18"
+  }
+}
