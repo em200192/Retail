@@ -5,7 +5,8 @@
  * in memory only: reload the page and the shop resets. Not used in production.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { uuidv7 } from '@retail/shared';
+import { productNameFromInvoice, uuidv7 } from '@retail/shared';
+import { pagesFromFile, readInvoice, ReadError, similarity } from './ocr';
 
 export const DEMO_API = 'https://demo.counter.invalid';
 declare global {
@@ -352,6 +353,7 @@ on('POST', '/v1/stock/waste', (c) => {
 
 // ---- purchasing
 on('GET', '/v1/suppliers', () => S.suppliers);
+on('GET', '/v1/suppliers/:id/products', (c) => S.supplierProducts?.[c.params.id] ?? []);
 on('POST', '/v1/suppliers', (c) => { const s = { id: uuidv7(), is_active: true, order_days: null, ...c.body }; S.suppliers.push(s); return created(s); });
 on('GET', '/v1/purchase-requests', (c) => S.requests.filter((r: any) => !c.q.get('status') || r.status === c.q.get('status')));
 on('POST', '/v1/purchase-requests', (c) => {
@@ -415,18 +417,80 @@ function invoiceRow(d: any) { return { id: d.id, status: d.status, invoice_numbe
 function syncInvoiceRow(d: any) { S.invoices = S.invoices.map((r: any) => (r.id === d.id ? invoiceRow(d) : r)); }
 on('GET', '/v1/invoices', (c) => S.invoices.filter((i: any) => !c.q.get('status') || i.status === c.q.get('status')));
 on('GET', '/v1/invoices/:id', (c) => S.invoiceDetails[c.params.id] ?? fail(404, 'Invoice not found', undefined, 'not_found'));
-on('POST', '/v1/invoices', () => {
-  const template: any = Object.values(S.invoiceDetails)[0];
+const dataUrlToB64 = (s: string) => s.replace(/^data:[^,]*,/, '');
+const defaultLevel = () => S.priceLevels.find((p: any) => p.is_default) ?? S.priceLevels[0];
+function findByBarcode(code: string): string | null {
+  for (const [pid, det] of Object.entries<any>(S.productDetails)) if ((det.barcodes ?? []).some((b: any) => b.barcode === code)) return pid;
+  return null;
+}
+function supplierCodeMatch(supplierId: string | null, code: string | null) {
+  if (!supplierId || !code) return null;
+  return (S.supplierProducts?.[supplierId] ?? []).find((sp: any) => sp.supplier_code === code) ?? null;
+}
+/** Supplier code (1.0) > barcode (0.97) > fuzzy name (capped at 0.85) — same order as the API. */
+function matchLine(supplierId: string | null, l: any) {
+  const sp = supplierCodeMatch(supplierId, l.supplier_code);
+  if (sp) return { product_id: sp.product_id, match_status: 'matched_auto', match_confidence: 1 };
+  if (l.barcode) { const pid = findByBarcode(l.barcode); if (pid) return { product_id: pid, match_status: 'matched_auto', match_confidence: 0.97 }; }
+  const want = productNameFromInvoice(l.description ?? '');
+  let best: { id: string; s: number } | null = null;
+  for (const p of S.products) { if (p.archived_at) continue; const s = similarity(want, p.name); if (!best || s > best.s) best = { id: p.id, s }; }
+  if (best && best.s >= 0.45) return { product_id: best.id, match_status: 'suggested', match_confidence: Math.min(0.85, Math.round(best.s * 100) / 100) };
+  return { product_id: null, match_status: 'unmatched', match_confidence: null };
+}
+const MATCHED = new Set(['matched_auto', 'matched_manual', 'new_product_created']);
+
+async function processInvoice(id: string, file: { b64: string; mime: string }) {
+  const d = S.invoiceDetails[id];
+  const progress = (text: string, vars?: Record<string, string | number>) => { d.ocr_progress = { text, vars }; };
+  try {
+    progress('Preparing the pages…');
+    const pages = await pagesFromFile(file.b64, file.mime);
+    const x = await readInvoice(pages, progress);
+    // Supplier: match by name (or VAT number), else create it — like the API.
+    const nm = String(x.supplier_name ?? '').trim();
+    let sup = nm ? S.suppliers.find((s: any) => (x.supplier_vat_number && s.vat_number === x.supplier_vat_number)
+      || similarity(s.name, nm.replace(/\b(ltd|limited|plc|wholesale|cash\s*&?\s*carry)\b/gi, '')) >= 0.5) : null;
+    if (!sup && nm) { sup = { id: uuidv7(), name: nm, vat_number: x.supplier_vat_number ?? null, is_active: true, order_days: null, order_method: 'email', created_at: now() };
+      S.suppliers.push(sup); S.supplierProducts[sup.id] = []; }
+    if (sup && x.invoice_number && Object.values<any>(S.invoiceDetails).some((o) => o.id !== id && o.supplier_id === sup.id
+      && o.invoice_number === x.invoice_number && o.status !== 'rejected')) {
+      Object.assign(d, { status: 'rejected', supplier_id: sup.id, supplier_name: sup.name, invoice_number: x.invoice_number,
+        ocr_error: 'Duplicate invoice: this supplier invoice number has already been uploaded' });
+      return;
+    }
+    const lines = (x.lines ?? []).map((r: any, i: number) => {
+      const l: any = { id: uuidv7(), invoice_id: id, line_no: i + 1, raw_text: r.raw_text ?? null, supplier_code: r.supplier_code ?? null,
+        barcode: r.barcode ? String(r.barcode).replace(/\D/g, '') || null : null, description: r.description ?? '', quantity: r.quantity ?? null,
+        pack_size: r.pack_size ?? null, unit_cost_pence: r.unit_cost_pence ?? null, line_total_pence: r.line_total_pence ?? null,
+        vat_code: ['S', 'R', 'Z', 'E'].includes(r.vat_code) ? r.vat_code : null, is_pmp: r.is_pmp ?? null, pmp_price_pence: r.pmp_price_pence ?? null,
+        rrp_pence: r.rrp_pence ?? null, expiry_date: r.expiry_date ?? null, matched_by: null };
+      Object.assign(l, matchLine(sup?.id ?? null, l));
+      l.product_name = productName(l.product_id);
+      return l;
+    });
+    const conf = typeof x.confidence === 'number' ? x.confidence : 0.7;
+    const allMatched = lines.length > 0 && lines.every((l: any) => MATCHED.has(l.match_status));
+    Object.assign(d, { supplier_id: sup?.id ?? null, supplier_name: sup?.name ?? null, invoice_number: x.invoice_number ?? null,
+      invoice_date: x.invoice_date ?? null, due_date: x.due_date ?? null, subtotal_pence: x.subtotal_pence ?? null, vat_pence: x.vat_pence ?? null,
+      total_pence: x.total_pence ?? null, ocr_raw: x, ocr_confidence: conf, ocr_provider: 'claude', processed_at: now(), lines,
+      status: allMatched && conf >= 0.8 ? 'approved' : 'needs_review' });
+  } catch (e) {
+    Object.assign(d, { status: 'failed', ocr_error: e instanceof ReadError ? e.message : 'We couldn’t read this invoice. Upload it again, or try a clearer photo.' });
+    console.error(e);
+  } finally {
+    delete d.ocr_progress; syncInvoiceRow(d);
+  }
+}
+
+on('POST', '/v1/invoices', (c) => {
   const id = uuidv7();
-  const d: any = { ...JSON.parse(JSON.stringify(template)), id, status: 'processing', invoice_number: null, supplier_name: null, ocr_confidence: null,
-    ocr_error: null, created_at: now(), posted_at: null };
-  d.lines = d.lines.map((l: any) => ({ ...l, id: uuidv7() }));
-  const ready = { invoice_number: `INV-${String(Date.now()).slice(-5)}`, supplier_name: template.supplier_name, supplier_id: template.supplier_id,
-    ocr_confidence: 0.91, status: 'needs_review' };
-  S.invoiceDetails[id] = { ...d, lines: [] }; S.invoices.unshift(invoiceRow(S.invoiceDetails[id]));
-  // Pretend the OCR worker reads it a few seconds later.
-  setTimeout(() => { Object.assign(S.invoiceDetails[id], d, ready); syncInvoiceRow(S.invoiceDetails[id]); }, 3500);
-  return created(invoiceRow(S.invoiceDetails[id]));
+  const d: any = { id, tenant_id: S.me.tenant.id, branch_id: c.body.branch_id ?? branchId, supplier_id: null, purchase_order_id: null, status: 'processing',
+    invoice_number: null, invoice_date: null, due_date: null, subtotal_pence: null, vat_pence: null, total_pence: null, supplier_name: null,
+    ocr_confidence: null, ocr_error: null, ocr_raw: null, created_at: now(), posted_at: null, uploaded_by: c.staffId, lines: [] };
+  S.invoiceDetails[id] = d; S.invoices.unshift(invoiceRow(d));
+  void processInvoice(id, { b64: dataUrlToB64(c.body.content_base64 ?? ''), mime: c.body.mime_type ?? 'image/jpeg' });
+  return created(invoiceRow(d));
 });
 on('PATCH', '/v1/invoices/:id', (c) => {
   const d = S.invoiceDetails[c.params.id]; Object.assign(d, c.body); if (c.body.supplier_id) d.supplier_name = supplierName(c.body.supplier_id);
@@ -439,14 +503,80 @@ on('PATCH', '/v1/invoices/:id/lines/:lineId', (c) => {
   else if (c.body.product_id) Object.assign(l, { match_status: 'matched_manual', match_confidence: 1, product_name: productName(c.body.product_id) });
   return l;
 });
+
+function requireOpenInvoice(id: string) {
+  const d = S.invoiceDetails[id]; if (!d) fail(404, 'Invoice not found', undefined, 'not_found');
+  if (!['needs_review', 'approved'].includes(d.status)) fail(409, `Invoice is ${d.status}`, undefined, 'conflict');
+  return d;
+}
+function createProductFromLine(d: any, lineId: string, o: { name?: string; vat_code?: string; category_id?: string | null; price_pence?: number | null } = {}) {
+  const l = d.lines.find((x: any) => x.id === lineId); if (!l) fail(404, 'Invoice line not found', undefined, 'not_found');
+  if (l.match_status === 'ignored') fail(409, 'This line is ignored', undefined, 'conflict');
+  const name = (o.name ?? productNameFromInvoice(l.description)).trim(); if (!name) fail(422, 'Enter a product name');
+  if (l.barcode && findByBarcode(l.barcode)) fail(409, 'A product with this barcode already exists — match the line to it instead', undefined, 'conflict');
+  const pid = uuidv7(); const vat = o.vat_code ?? l.vat_code ?? 'S';
+  const cost = l.unit_cost_pence != null ? Math.round(l.unit_cost_pence / (l.pack_size || 1)) : null;
+  const price = o.price_pence !== undefined ? o.price_pence : (l.is_pmp && l.pmp_price_pence ? l.pmp_price_pence : l.rrp_pence);
+  const lvl = defaultLevel();
+  const barcodes = l.barcode ? [{ id: uuidv7(), product_id: pid, barcode: l.barcode, barcode_type: l.barcode.length === 8 ? 'EAN8' : l.barcode.length === 14 ? 'ITF14' : 'EAN13',
+    units_per_scan: 1, is_primary: true, is_pmp: !!(l.is_pmp && l.pmp_price_pence), pmp_price_pence: l.is_pmp ? l.pmp_price_pence : null }] : [];
+  const prices = price != null ? [{ id: uuidv7(), product_id: pid, price_level_id: lvl.id, price_level_code: lvl.code, branch_id: null, min_qty: 1, price_pence: price,
+    valid_from: now(), valid_to: null }] : [];
+  const base = { id: pid, name, name_i18n: {}, brand: null, size_text: null, sku: null, category_id: o.category_id ?? null, vat_code: vat, min_age: null,
+    sold_by_weight: false, unit_type: 'each', track_stock: true, is_active: true, archived_at: null, avg_cost_pence: cost, last_cost_pence: cost, updated_at: now() };
+  S.productDetails[pid] = { ...base, barcodes, current_prices: prices, stock: [{ branch_id: branchId, on_hand: 0, reserved: 0, available: 0 }] };
+  S.priceHistory[pid] = prices;
+  S.products.push({ ...base, retail_price_pence: price ?? null, barcode: l.barcode ?? null });
+  S.products.sort((a: any, b: any) => a.name.localeCompare(b.name));
+  S.stock.push({ product_id: pid, name, on_hand: 0, reserved: 0, available: 0, reorder_point: null, reorder_qty: null });
+  S.pull.products.push({ ...base, is_ranged: true }); S.pull.barcodes.push(...barcodes); S.pull.prices.push(...prices);
+  changedAt[pid] = Date.now();
+  for (const x of d.lines) {
+    if (x.id === lineId || (l.supplier_code && x.supplier_code === l.supplier_code && !x.product_id && x.match_status !== 'ignored')) {
+      Object.assign(x, { product_id: pid, product_name: name, match_status: 'new_product_created', match_confidence: 1, matched_by: ownerId });
+    }
+  }
+  return { product_id: pid, name, price_pence: price ?? null };
+}
+on('POST', '/v1/invoices/:id/lines/:lineId/create-product', (c) => created(createProductFromLine(requireOpenInvoice(c.params.id), c.params.lineId, c.body ?? {})));
+on('POST', '/v1/invoices/:id/create-missing-products', (c) => {
+  const d = requireOpenInvoice(c.params.id); const out: any[] = [], skipped: any[] = [];
+  for (const l of d.lines) {
+    if (l.product_id || l.match_status === 'ignored' || !((l.quantity ?? 0) > 0) || !(l.supplier_code || l.barcode)) continue;
+    try { out.push(createProductFromLine(d, l.id)); } catch (e) { skipped.push({ line_id: l.id, reason: (e as Error).message }); }
+  }
+  return { created: out, skipped };
+});
 on('POST', '/v1/invoices/:id/post', (c) => {
-  const d = S.invoiceDetails[c.params.id];
+  const d = requireOpenInvoice(c.params.id);
   const open = d.lines.filter((l: any) => l.match_status !== 'ignored' && !l.product_id);
   if (open.length) fail(422, `${open.length} line(s) still need a product (or mark them ignored)`);
+  // Net per product, so a void note (−1) cancels the line it voids.
+  const per = new Map<string, { units: number; cost: number; costed: number; codes: Map<string, any> }>();
+  for (const l of d.lines) {
+    if (!l.product_id || l.match_status === 'ignored') continue;
+    const pack = l.pack_size || 1, units = (l.quantity ?? 0) * pack;
+    const p = per.get(l.product_id) ?? { units: 0, cost: 0, costed: 0, codes: new Map() };
+    p.units += units;
+    if (l.unit_cost_pence != null) { p.cost += (l.quantity ?? 0) * l.unit_cost_pence; p.costed += units; }
+    if (l.supplier_code && (l.quantity ?? 0) > 0) p.codes.set(l.supplier_code, l);
+    per.set(l.product_id, p);
+  }
   let n = 0;
-  for (const l of d.lines) if (l.product_id && l.match_status !== 'ignored') {
-    const pack = l.pack_size || 1; n++;
-    stockAdd(l.product_id, (l.quantity ?? 0) * pack, 'receipt', { cost: l.unit_cost_pence ? Math.round(l.unit_cost_pence / pack) : null });
+  for (const [pid, p] of per) {
+    if (p.units <= 0) continue;
+    const unitCost = p.costed > 0 ? Math.round(p.cost / p.costed) : null;
+    stockAdd(pid, p.units, 'receipt', { cost: unitCost, staffId: c.staffId }); n++;
+    const det = S.productDetails[pid]; if (det && unitCost != null) det.last_cost_pence = unitCost;
+    if (d.supplier_id) {
+      const list = (S.supplierProducts[d.supplier_id] ??= []);
+      for (const [code, l] of p.codes) {
+        const ex = list.find((sp: any) => sp.supplier_code === code);
+        const row = { supplier_id: d.supplier_id, product_id: pid, supplier_code: code, supplier_description: l.description, pack_size: l.pack_size,
+          case_cost_pence: l.unit_cost_pence, last_cost_at: now(), match_source: 'ocr_confirmed', product_name: productName(pid) };
+        if (ex) Object.assign(ex, row); else list.push({ id: uuidv7(), is_preferred: false, created_at: now(), ...row });
+      }
+    }
   }
   Object.assign(d, { status: 'posted', posted_at: now() }); syncInvoiceRow(d);
   return { invoice: d, lines_received: n };

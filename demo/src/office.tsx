@@ -23,6 +23,22 @@ import Staff from '@/app/(app)/staff/page';
 import Settings from '@/app/(app)/settings/page';
 import NotFound from '@/app/not-found';
 import { MemoryRouter } from './shims/router';
+import { I18nProvider, useLang, type Lang } from '@/lib/i18n';
+import { useEffect } from 'react';
+
+declare global { interface Window { __officeLang?: { lang: Lang; setLang: (l: Lang) => void }; __onOfficeLang?: (l: Lang) => void } }
+
+/** Lets the demo bar switch the back-office language, and keeps the pane's direction in step. */
+function LangBridge() {
+  const { lang, setLang } = useLang();
+  useEffect(() => {
+    window.__officeLang = { lang, setLang };
+    const pane = document.getElementById('office-pane');
+    if (pane) { pane.dir = lang === 'ar' ? 'rtl' : 'ltr'; pane.lang = lang === 'ar' ? 'ar' : 'en-GB'; }
+    window.__onOfficeLang?.(lang);
+  }, [lang, setLang]);
+  return null;
+}
 
 const APP: [RegExp, React.ComponentType, string[]][] = [
   [/^\/$/, Overview, []], [/^\/products$/, Products, []], [/^\/products\/([^/]+)$/, Product, ['id']], [/^\/stock$/, Stock, []],
@@ -45,6 +61,6 @@ function render(loc: { pathname: string }) {
 }
 
 export function mountOffice(el: HTMLElement) {
-  createRoot(el).render(<MemoryRouter initial="/login" render={render} />);
+  createRoot(el).render(<I18nProvider><LangBridge /><MemoryRouter initial="/login" render={render} /></I18nProvider>);
 }
 (window as unknown as { mountOffice: typeof mountOffice }).mountOffice = mountOffice;

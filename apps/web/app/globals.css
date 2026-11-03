@@ -19,7 +19,7 @@
   --color-danger: #C62828;
   --color-danger-tint: #FBEAEA;
   --color-focus: #FFDD00;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: var(--font-inter), var(--font-arabic), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius-card: 12px;
   --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
   --shadow-pop: 0 10px 30px -10px rgb(15 23 42 / 0.25), 0 4px 10px -4px rgb(15 23 42 / 0.1);
@@ -36,8 +36,9 @@ body { font-family: var(--font-sans); font-feature-settings: "cv11", "ss01"; }
   box-shadow: inset 0 0 0 2px var(--color-ink);
 }
 
-.skip-link { position: absolute; left: -9999px; top: 0; }
-.skip-link:focus { left: 1rem; top: 1rem; z-index: 100; background: var(--color-focus); color: var(--color-ink); padding: .5rem 1rem; font-weight: 600; }
+/* Visually hidden until focused (no off-screen offset: that would scroll sideways in right-to-left pages). */
+.skip-link { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.skip-link:focus { width: auto; height: auto; clip-path: none; inset-inline-start: 1rem; top: 1rem; z-index: 100; background: var(--color-focus); color: var(--color-ink); padding: .5rem 1rem; font-weight: 600; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
@@ -49,3 +50,7 @@ body { font-family: var(--font-sans); font-feature-settings: "cv11", "ss01"; }
 .skeleton { background: linear-gradient(90deg, #EEF1F5 25%, #F6F8FA 37%, #EEF1F5 63%); background-size: 800px 100%; animation: shimmer 1.4s infinite linear; border-radius: 8px; }
 
 dialog::backdrop { background: rgb(15 23 42 / 0.45); backdrop-filter: blur(2px); }
+
+/* Arabic: Plex Arabic first so Arabic and Latin share one rhythm; slightly taller lines. */
+:root[dir="rtl"] body { font-family: var(--font-arabic), var(--font-inter), ui-sans-serif, system-ui, sans-serif; line-height: 1.6; }
+:root[dir="rtl"] .tabular, :root[dir="rtl"] .font-mono { unicode-bidi: plaintext; }

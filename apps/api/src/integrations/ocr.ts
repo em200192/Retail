@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod/v4';
+import { INVOICE_OCR_INSTRUCTIONS } from '@retail/shared';
 import type { Config } from '../config.ts';
 
 /**
@@ -26,6 +27,7 @@ export const ocrInvoiceSchema = z.object({
     pack_size: z.number().nullable().describe('Units per case, e.g. 24 for "24x330ml"'),
     unit_cost_pence: z.number().int().nullable().describe('Cost per quantity unit as printed, ex VAT'),
     line_total_pence: z.number().int().nullable().describe('Line total ex VAT'),
+    rrp_pence: z.number().int().nullable().default(null).describe('Recommended retail price per unit, if printed'),
     vat_code: z.enum(['S', 'R', 'Z', 'E']).nullable(),
     is_pmp: z.boolean().nullable().describe('Price-marked pack'),
     pmp_price_pence: z.number().int().nullable(),
@@ -54,14 +56,7 @@ export interface OcrProvider {
 
 export class OcrRefusedError extends Error {}
 
-const SYSTEM = `You read UK wholesale supplier invoices (Booker, Bestway, Costco, Parfetts, Unitas, Dhamecha and similar)
-for an independent convenience shop. Extract the header and every product line exactly as printed.
-- All money is integer pence (e.g. £12.34 -> 1234). Line costs are ex VAT.
-- Supplier codes matter more than descriptions: copy them exactly.
-- Use null for anything not printed; never guess barcodes or codes.
-- UK VAT codes: S = 20%, R = 5%, Z = 0%, E = exempt. Most food is Z.
-- PMP means price-marked pack; record the printed retail price when shown.
-- Set confidence below 0.8 if the scan is blurry, cut off, or totals don't add up.`;
+const SYSTEM = INVOICE_OCR_INSTRUCTIONS;
 
 /** Claude vision OCR via the official SDK with schema-validated JSON output. */
 export class ClaudeOcrProvider implements OcrProvider {

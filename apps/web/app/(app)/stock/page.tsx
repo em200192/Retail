@@ -1,5 +1,6 @@
 'use client';
-import { formatDateTimeUK, formatDateUK, formatGBP, todayUK } from '@retail/shared';
+import { formatGBP, todayUK } from '@retail/shared';
+import { formatDateTimeUK, formatDateUK } from '@/lib/format';
 import { Boxes, CalendarClock, ClipboardCheck, PackagePlus, Search, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
@@ -8,6 +9,7 @@ import { Badge, Button, Card, EmptyState, ErrorNote, Field, Input, LoadingRows, 
 import { api, ApiError, useApi } from '@/lib/api';
 import { useDebounced } from '@/lib/hooks';
 import { useMe } from '@/lib/me';
+import { t } from '@/lib/i18n';
 
 const REASONS: Record<string, string> = { expired: 'Out of date', damaged: 'Damaged', spoiled: 'Spoiled / chiller fault', theft_known: 'Known theft',
   sampling: 'Tasting / sampling', count_correction: 'Count correction', supplier_short: 'Supplier short-delivered', other: 'Other' };
@@ -37,47 +39,47 @@ function StockInner() {
 
   return (
     <>
-      <PageHeader title="Stock" description="Every change is recorded in the stock ledger — nothing is ever overwritten."
+      <PageHeader title={t("Stock")} description={t("Every change is recorded in the stock ledger — nothing is ever overwritten.")}
         actions={<>
-          {can('stock.waste') && <Button variant="secondary" icon={<Trash2 className="size-4" />} onClick={() => setAction({ kind: 'waste' })}>Record waste</Button>}
-          {can('stock.adjust') && <Button variant="secondary" icon={<SlidersHorizontal className="size-4" />} onClick={() => setAction({ kind: 'adjust' })}>Adjust</Button>}
-          {can('stock.adjust') && <Button icon={<PackagePlus className="size-4" />} onClick={() => setAction({ kind: 'receive' })}>Goods in</Button>}
+          {can('stock.waste') && <Button variant="secondary" icon={<Trash2 className="size-4" />} onClick={() => setAction({ kind: 'waste' })}>{t("Record waste")}</Button>}
+          {can('stock.adjust') && <Button variant="secondary" icon={<SlidersHorizontal className="size-4" />} onClick={() => setAction({ kind: 'adjust' })}>{t("Adjust")}</Button>}
+          {can('stock.adjust') && <Button icon={<PackagePlus className="size-4" />} onClick={() => setAction({ kind: 'receive' })}>{t("Goods in")}</Button>}
         </>} />
       <Tabs value={tab} onChange={setTab} tabs={[
-        { id: 'levels', label: 'Stock levels' }, { id: 'expiring', label: 'Use by soon', count: expiring.data?.length }, { id: 'movements', label: 'History' }]} />
+        { id: 'levels', label: t('Stock levels') }, { id: 'expiring', label: t('Use by soon'), count: expiring.data?.length }, { id: 'movements', label: t('History') }]} />
 
       {tab === 'levels' && (
         <Card>
           <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-center">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" aria-hidden />
-              <label htmlFor="sq" className="sr-only">Search stock</label>
-              <Input id="sq" placeholder="Search products" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
+              <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-subtle" aria-hidden />
+              <label htmlFor="sq" className="sr-only">{t("Search stock")}</label>
+              <Input id="sq" placeholder={t("Search products")} value={q} onChange={(e) => setQ(e.target.value)} className="ps-9" />
             </div>
-            <div className="flex gap-1 rounded-lg bg-surface p-1" role="group" aria-label="Filter">
-              <button onClick={() => setOnlyLow(false)} aria-pressed={!onlyLow} className={`rounded-md px-3 py-1.5 text-sm font-medium ${!onlyLow ? 'bg-white shadow-sm' : 'text-muted'}`}>All</button>
+            <div className="flex gap-1 rounded-lg bg-surface p-1" role="group" aria-label={t("Filter")}>
+              <button onClick={() => setOnlyLow(false)} aria-pressed={!onlyLow} className={`rounded-md px-3 py-1.5 text-sm font-medium ${!onlyLow ? 'bg-white shadow-sm' : 'text-muted'}`}>{t("All")}</button>
               <button onClick={() => setOnlyLow(true)} aria-pressed={onlyLow} className={`rounded-md px-3 py-1.5 text-sm font-medium ${onlyLow ? 'bg-white shadow-sm' : 'text-muted'}`}>
-                Running low {!onlyLow && lowCount > 0 && <span className="ml-1 rounded-full bg-warning-tint px-1.5 text-xs text-warning">{lowCount}</span>}</button>
+                {t('Running low')} {!onlyLow && lowCount > 0 && <span className="ms-1 rounded-full bg-warning-tint px-1.5 text-xs text-warning">{lowCount}</span>}</button>
             </div>
           </div>
           <ErrorNote error={levels.error} />
           {levels.isLoading && !levels.data ? <LoadingRows /> : levels.data?.length === 0 ? (
-            <EmptyState icon={<Boxes className="size-6" />} title={onlyLow ? 'Nothing is running low' : 'No stock yet'}>{onlyLow ? 'Every product is above its reorder point.' : 'Record a delivery to get started.'}</EmptyState>
+            <EmptyState icon={<Boxes className="size-6" />} title={onlyLow ? t('Nothing is running low') : t('No stock yet')}>{onlyLow ? t('Every product is above its reorder point.') : t('Record a delivery to get started.')}</EmptyState>
           ) : (
             <Table>
-              <thead><tr><Th>Product</Th><Th align="right">On hand</Th><Th align="right">Held for orders</Th><Th align="right">Reorder at</Th><Th>Status</Th><Th><span className="sr-only">Actions</span></Th></tr></thead>
+              <thead><tr><Th>{t("Product")}</Th><Th align="right">{t("On hand")}</Th><Th align="right">{t("Held for orders")}</Th><Th align="right">{t("Reorder at")}</Th><Th>{t("Status")}</Th><Th><span className="sr-only">{t("Actions")}</span></Th></tr></thead>
               <tbody>{levels.data?.map((l) => {
                 const low = l.reorder_point !== null && l.on_hand <= l.reorder_point;
                 const out = l.on_hand <= 0;
                 return (
                   <tr key={l.product_id} className="hover:bg-surface/60">
-                    <Td className="font-medium">{l.name}{l.shelf_location && <span className="ml-2 text-xs text-subtle">{l.shelf_location}</span>}</Td>
+                    <Td className="font-medium">{l.name}{l.shelf_location && <span className="ms-2 text-xs text-subtle">{l.shelf_location}</span>}</Td>
                     <Td align="right" className="font-semibold">{l.on_hand}</Td>
                     <Td align="right" className="text-muted">{l.reserved || '—'}</Td>
                     <Td align="right" className="text-muted">{l.reorder_point ?? '—'}</Td>
-                    <Td>{out ? <Badge tone="danger">Out of stock</Badge> : low ? <Badge tone="warning">Running low</Badge> : <Badge tone="success">In stock</Badge>}</Td>
+                    <Td>{out ? <Badge tone="danger">{t("Out of stock")}</Badge> : low ? <Badge tone="warning">{t("Running low")}</Badge> : <Badge tone="success">{t("In stock")}</Badge>}</Td>
                     <Td align="right">
-                      {can('stock.adjust') && <Button size="sm" variant="ghost" onClick={() => setAction({ kind: 'receive', product: { id: l.product_id, name: l.name } })}>Goods in</Button>}
+                      {can('stock.adjust') && <Button size="sm" variant="ghost" onClick={() => setAction({ kind: 'receive', product: { id: l.product_id, name: l.name } })}>{t("Goods in")}</Button>}
                     </Td>
                   </tr>
                 );
@@ -89,17 +91,17 @@ function StockInner() {
 
       {tab === 'expiring' && (
         <Card>
-          {expiring.data?.length === 0 ? <EmptyState icon={<CalendarClock className="size-6" />} title="Nothing to clear">No batches reach their use-by date in the next 3 days.</EmptyState> : (
+          {expiring.data?.length === 0 ? <EmptyState icon={<CalendarClock className="size-6" />} title={t("Nothing to clear")}>{t("No batches reach their use-by date in the next 3 days.")}</EmptyState> : (
             <Table>
-              <thead><tr><Th>Product</Th><Th>Use by</Th><Th align="right">Left</Th><Th>Suggested action</Th><Th><span className="sr-only">Actions</span></Th></tr></thead>
+              <thead><tr><Th>{t("Product")}</Th><Th>{t("Use by")}</Th><Th align="right">{t("Left")}</Th><Th>{t("Suggested action")}</Th><Th><span className="sr-only">{t("Actions")}</span></Th></tr></thead>
               <tbody>{expiring.data?.map((e) => (
                 <tr key={e.batch_id}>
                   <Td className="font-medium">{e.name}</Td>
                   <Td>{formatDateUK(e.expiry_date, { weekday: 'short', day: 'numeric', month: 'short' })}
-                    <Badge tone={e.days_left <= 0 ? 'danger' : 'warning'} className="ml-2">{e.days_left < 0 ? 'Expired' : e.days_left === 0 ? 'Today' : e.days_left === 1 ? 'Tomorrow' : `${e.days_left} days`}</Badge></Td>
+                    <Badge tone={e.days_left <= 0 ? 'danger' : 'warning'} className="ms-2">{e.days_left < 0 ? t('Expired') : e.days_left === 0 ? t('Today') : e.days_left === 1 ? t('Tomorrow') : t('{n} days', { n: e.days_left })}</Badge></Td>
                   <Td align="right">{e.qty_remaining}</Td>
-                  <Td className="text-muted">{e.days_left <= 0 ? 'Remove from sale and record as waste' : 'Reduce to clear and print a yellow sticker'}</Td>
-                  <Td align="right">{can('stock.waste') && <Button size="sm" variant="secondary" onClick={() => setAction({ kind: 'waste', product: { id: e.product_id, name: e.name }, batchId: e.batch_id })}>Waste</Button>}</Td>
+                  <Td className="text-muted">{e.days_left <= 0 ? t('Remove from sale and record as waste') : t('Reduce to clear and print a yellow sticker')}</Td>
+                  <Td align="right">{can('stock.waste') && <Button size="sm" variant="secondary" onClick={() => setAction({ kind: 'waste', product: { id: e.product_id, name: e.name }, batchId: e.batch_id })}>{t("Waste")}</Button>}</Td>
                 </tr>
               ))}</tbody>
             </Table>
@@ -111,14 +113,14 @@ function StockInner() {
         <Card>
           {moves.isLoading ? <LoadingRows /> : (
             <Table>
-              <thead><tr><Th>When</Th><Th>Product</Th><Th>Type</Th><Th align="right">Change</Th><Th>Reason</Th><Th align="right">Unit cost</Th></tr></thead>
+              <thead><tr><Th>{t("When")}</Th><Th>{t("Product")}</Th><Th>{t("Type")}</Th><Th align="right">{t("Change")}</Th><Th>{t("Reason")}</Th><Th align="right">{t("Unit cost")}</Th></tr></thead>
               <tbody>{moves.data?.map((m) => (
                 <tr key={m.id}>
                   <Td className="whitespace-nowrap text-muted">{formatDateTimeUK(m.occurred_at)}</Td>
                   <Td>{names.get(m.product_id) ?? '—'}</Td>
-                  <Td><Badge tone={MOVES[m.movement_type]?.tone ?? 'neutral'}>{MOVES[m.movement_type]?.label ?? m.movement_type}</Badge></Td>
+                  <Td><Badge tone={MOVES[m.movement_type]?.tone ?? 'neutral'}>{t(MOVES[m.movement_type]?.label ?? m.movement_type)}</Badge></Td>
                   <Td align="right" className={m.quantity > 0 ? 'font-semibold text-success' : 'font-semibold'}>{m.quantity > 0 ? `+${m.quantity}` : m.quantity}</Td>
-                  <Td className="text-muted">{m.reason_code ? REASONS[m.reason_code] : ''}{m.reason ? ` — ${m.reason}` : ''}</Td>
+                  <Td className="text-muted">{m.reason_code ? t(REASONS[m.reason_code] ?? '') : ''}{m.reason ? ` — ${m.reason}` : ''}</Td>
                   <Td align="right" className="text-muted">{m.unit_cost_pence ? formatGBP(m.unit_cost_pence) : '—'}</Td>
                 </tr>
               ))}</tbody>
@@ -144,29 +146,29 @@ function StockActionModal({ action, onClose, onDone, branchId }: { action: Actio
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const staff = useApi<any[]>(approval ? `/v1/branches/${branchId}/staff-tiles` : null);
-  const title = { receive: 'Goods in', adjust: 'Adjust stock', waste: 'Record waste' }[action.kind];
+  const title = { receive: t('Goods in'), adjust: t('Adjust stock'), waste: t('Record waste') }[action.kind];
 
   const submit = async () => {
     const n = Number(qty);
-    if (!product) return setErr('Choose a product');
-    if (!(n > 0)) return setErr('Enter a quantity greater than 0');
+    if (!product) return setErr(t('Choose a product'));
+    if (!(n > 0)) return setErr(t('Enter a quantity greater than 0'));
     setBusy(true); setErr(null);
     try {
       if (action.kind === 'receive') {
         await api('/v1/stock/receipts', { body: { branch_id: branchId, lines: [{ product_id: product.id, quantity: n, unit_cost_pence: cost, expiry_date: expiry || null }] } });
-        toast(`${n} × ${product.name} booked in`);
+        toast(t('{n} × {name} booked in', { n, name: product.name }));
       } else if (action.kind === 'waste') {
         const r = await api('/v1/stock/waste', { body: { branch_id: branchId, product_id: product.id, quantity: n, reason_code: reason, reason: note || null, batch_id: action.batchId ?? null } });
-        toast(`Waste recorded · ${formatGBP(r.cost_pence)} at cost`);
+        toast(t('Waste recorded · {amount} at cost', { amount: formatGBP(r.cost_pence) }));
       } else {
         const r = await api('/v1/stock/adjustments', { body: { branch_id: branchId, product_id: product.id, quantity: direction === 'up' ? n : -n,
           reason_code: reason, reason: note || null, approval: approval ? { approver_staff_id: approval.staff, approver_pin: approval.pin } : null } });
-        toast(`Stock adjusted — ${r.on_hand} now on hand`);
+        toast(t('Stock adjusted — {n} now on hand', { n: r.on_hand }));
       }
       onDone(); onClose();
     } catch (e) {
       const ae = e as ApiError;
-      if (ae.needsApproval && !approval) { setApproval({ staff: '', pin: '' }); setErr('This is over your limit. A manager needs to approve it with their PIN.'); }
+      if (ae.needsApproval && !approval) { setApproval({ staff: '', pin: '' }); setErr(t('This is over your limit. A manager needs to approve it with their PIN.')); }
       else setErr(ae.message);
     } finally { setBusy(false); }
   };
@@ -174,37 +176,37 @@ function StockActionModal({ action, onClose, onDone, branchId }: { action: Actio
   return (
     <Modal open onClose={onClose} title={title}
       description={action.kind === 'adjust' ? 'Use this when a count shows the system is wrong. It adds a correcting entry.' : undefined}
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button variant={action.kind === 'waste' ? 'danger' : 'primary'} onClick={submit} loading={busy}>{title}</Button></>}>
+      footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button variant={action.kind === 'waste' ? 'danger' : 'primary'} onClick={submit} loading={busy}>{title}</Button></>}>
       {err && <p role="alert" className="rounded-lg bg-danger-tint px-3 py-2 text-sm font-medium text-danger">{err}</p>}
-      <Field label="Product" htmlFor="pp"><ProductPicker id="pp" value={product} onChange={setProduct} /></Field>
+      <Field label={t("Product")} htmlFor="pp"><ProductPicker id="pp" value={product} onChange={setProduct} /></Field>
       {action.kind === 'adjust' && (
-        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Direction">
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={t("Direction")}>
           {(['down', 'up'] as const).map((d) => (
             <button key={d} type="button" role="radio" aria-checked={direction === d} onClick={() => setDirection(d)}
               className={`rounded-lg border px-3 py-2.5 text-sm font-medium ${direction === d ? 'border-brand bg-brand-tint text-brand-dark' : 'border-line'}`}>
-              {d === 'down' ? 'Fewer than the system says' : 'More than the system says'}</button>
+              {d === 'down' ? t('Fewer than the system says') : t('More than the system says')}</button>
           ))}
         </div>
       )}
       <div className="grid grid-cols-2 gap-4">
-        <Field label={action.kind === 'adjust' ? 'Difference' : 'Quantity'} htmlFor="qty"><Input id="qty" type="number" min={0} step="any" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
+        <Field label={action.kind === 'adjust' ? t('Difference') : t('Quantity')} htmlFor="qty"><Input id="qty" type="number" min={0} step="any" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
         {action.kind === 'receive' ? (
-          <Field label="Cost per unit (ex VAT)" htmlFor="cost"><MoneyInput id="cost" value={cost} onChange={setCost} /></Field>
+          <Field label={t("Cost per unit (ex VAT)")} htmlFor="cost"><MoneyInput id="cost" value={cost} onChange={setCost} /></Field>
         ) : (
-          <Field label="Reason" htmlFor="reason"><Select id="reason" value={reason} onChange={(e) => setReason(e.target.value)}>
+          <Field label={t("Reason")} htmlFor="reason"><Select id="reason" value={reason} onChange={(e) => setReason(e.target.value)}>
             {Object.entries(REASONS).filter(([k]) => action.kind === 'waste' ? !['count_correction', 'supplier_short'].includes(k) : true)
-              .map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select></Field>
+              .map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}</Select></Field>
         )}
       </div>
-      {action.kind === 'receive' && <Field label="Use-by date (if it has one)" htmlFor="exp"><Input id="exp" type="date" min={todayUK()} value={expiry} onChange={(e) => setExpiry(e.target.value)} /></Field>}
-      {action.kind !== 'receive' && <Field label="Note (optional)" htmlFor="note"><Input id="note" value={note} onChange={(e) => setNote(e.target.value)} /></Field>}
+      {action.kind === 'receive' && <Field label={t("Use-by date (if it has one)")} htmlFor="exp"><Input id="exp" type="date" min={todayUK()} value={expiry} onChange={(e) => setExpiry(e.target.value)} /></Field>}
+      {action.kind !== 'receive' && <Field label={t("Note (optional)")} htmlFor="note"><Input id="note" value={note} onChange={(e) => setNote(e.target.value)} /></Field>}
       {approval && (
         <div className="rounded-xl border border-accent/40 bg-accent-tint p-4 space-y-3">
-          <p className="flex items-center gap-2 text-sm font-semibold"><ClipboardCheck className="size-4" aria-hidden />Manager approval</p>
+          <p className="flex items-center gap-2 text-sm font-semibold"><ClipboardCheck className="size-4" aria-hidden />{t("Manager approval")}</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Manager" htmlFor="ap"><Select id="ap" value={approval.staff} onChange={(e) => setApproval({ ...approval, staff: e.target.value })}>
-              <option value="">Choose…</option>{(staff.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.display_name}</option>)}</Select></Field>
-            <Field label="Their PIN" htmlFor="apin"><Input id="apin" type="password" inputMode="numeric" autoComplete="off" maxLength={8} value={approval.pin}
+            <Field label={t("Manager")} htmlFor="ap"><Select id="ap" value={approval.staff} onChange={(e) => setApproval({ ...approval, staff: e.target.value })}>
+              <option value="">{t("Choose…")}</option>{(staff.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.display_name}</option>)}</Select></Field>
+            <Field label={t("Their PIN")} htmlFor="apin"><Input id="apin" type="password" inputMode="numeric" autoComplete="off" maxLength={8} value={approval.pin}
               onChange={(e) => setApproval({ ...approval, pin: e.target.value.replace(/\D/g, '') })} /></Field>
           </div>
         </div>

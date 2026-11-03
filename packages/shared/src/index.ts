@@ -5,3 +5,4 @@ export * from './barcode.ts';
 export * from './permissions.ts';
 export * from './sale.ts';
 export * from './format.ts';
+export * from './invoice-ocr.ts';

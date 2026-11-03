@@ -1,6 +1,8 @@
 'use client';
-import { formatDateUK, formatGBP } from '@retail/shared';
+import { formatGBP } from '@retail/shared';
+import { formatDateUK } from '@/lib/format';
 import { useState } from 'react';
+import { t } from '@/lib/i18n';
 
 /** Rounded "nice" axis maximum and 4 ticks. */
 function niceTicks(max: number): number[] {
@@ -28,12 +30,12 @@ export function DailyColumns({ data, label }: { data: { date: string; value: num
   const h = hover !== null ? data[hover] : null;
 
   return (
-    <figure className="relative">
+    <figure className="relative" dir="ltr">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={label}>
-        {ticks.map((t) => (
-          <g key={t}>
-            <line x1={pl} x2={W - pr} y1={y(t)} y2={y(t)} stroke="#E2E8F0" strokeWidth={1} />
-            <text x={pl - 8} y={y(t)} dy="0.32em" textAnchor="end" className="fill-[#64748B] text-[11px] tabular">{shortGBP(t)}</text>
+        {ticks.map((tick) => (
+          <g key={tick}>
+            <line x1={pl} x2={W - pr} y1={y(tick)} y2={y(tick)} stroke="#E2E8F0" strokeWidth={1} />
+            <text x={pl - 8} y={y(tick)} dy="0.32em" textAnchor="end" className="fill-[#64748B] text-[11px] tabular">{shortGBP(tick)}</text>
           </g>
         ))}
         {data.map((d, i) => {
@@ -68,7 +70,7 @@ export function DailyColumns({ data, label }: { data: { date: string; value: num
       )}
       <table className="sr-only">
         <caption>{label}</caption>
-        <thead><tr><th>Date</th><th>Sales</th></tr></thead>
+        <thead><tr><th>{t("Date")}</th><th>{t("Sales")}</th></tr></thead>
         <tbody>{data.map((d) => <tr key={d.date}><td>{formatDateUK(d.date)}</td><td>{formatGBP(d.value)}</td></tr>)}</tbody>
       </table>
     </figure>
@@ -83,7 +85,7 @@ export function RankBars({ rows, format = formatGBP }: { rows: { label: string; 
       {rows.map((r, i) => (
         <li key={r.label} className="group">
           <div className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="truncate"><span className="mr-2 text-subtle tabular">{i + 1}</span>{r.label}</span>
+            <span className="truncate"><span className="me-2 text-subtle tabular">{i + 1}</span>{r.label}</span>
             <span className="shrink-0 font-medium tabular">{format(r.value)}{r.sub && <span className="ml-1.5 font-normal text-subtle">{r.sub}</span>}</span>
           </div>
           <div className="mt-1.5 h-2 rounded-full bg-surface" aria-hidden>

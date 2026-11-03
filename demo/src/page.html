@@ -1,7 +1,7 @@
 <title>Counter Demo</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
 <style>
 /*OFFICE_CSS*/
 </style>
@@ -11,6 +11,7 @@
   --ink: #0F172A; --brand: #0B6E69; --brand-dark: #095854; --accent: #F2A900; --surface: #F7F8FA;
   --on-ink: #FFFFFF; --on-ink-muted: #CBD5E1; --line-ink: #334155; --danger: #C62828; --focus: #FFDD00;
   --font-inter: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-arabic: 'IBM Plex Sans Arabic', 'Geeza Pro', 'Noto Sans Arabic', sans-serif;
   color-scheme: light;
 }
 html, body { height: 100%; }
@@ -48,19 +49,31 @@ dialog.tips::backdrop { background: rgb(15 23 42 / .5); }
 .tips footer { display: flex; justify-content: flex-end; padding: 12px 22px 18px; }
 .tips footer button { appearance: none; border: 0; background: var(--brand); color: #fff; font: 600 15px var(--font-inter); padding: 11px 20px; border-radius: 10px; cursor: pointer; }
 @media (max-width: 520px) { .tools { margin-left: 0; width: 100%; } .seg { flex: 1; } .seg button { flex: 1; padding: 8px 6px; } .hide-sm { display: none; } }
+#office-pane[dir="rtl"] { font-family: var(--font-arabic), var(--font-inter); line-height: 1.6; }
+.bar[dir="rtl"], dialog.tips[dir="rtl"] { font-family: var(--font-arabic), var(--font-inter); }
+.bar[dir="rtl"] .seg button, .bar[dir="rtl"] .tool, .tips[dir="rtl"] footer button { font-family: var(--font-arabic), var(--font-inter); }
+.bar[dir="rtl"] .tools { margin-left: 0; margin-right: auto; }
+.tips[dir="rtl"] ol { padding-left: 0; padding-right: 20px; }
+.tips[dir="rtl"] h3 { letter-spacing: 0; }
+.lang { display: flex; background: #1E293B; border-radius: 8px; padding: 2px; gap: 2px; }
+.lang button { appearance: none; border: 0; background: transparent; color: var(--on-ink-muted); font: 600 13px var(--font-inter); padding: 6px 9px; border-radius: 6px; cursor: pointer; min-height: 30px; }
+.lang button[lang="ar"] { font-family: var(--font-arabic); }
+.lang button[aria-pressed="true"] { background: var(--on-ink); color: var(--ink); }
+@media (max-width: 520px) { .bar[dir="rtl"] .tools { margin-right: 0; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 
-<div class="bar" role="banner">
+<div class="bar" role="banner" id="bar">
   <div class="brand"><span class="logo" aria-hidden="true">C</span>Counter <span class="pill">Demo</span></div>
   <div class="seg" role="tablist" aria-label="Choose an app">
-    <button id="tab-till" role="tab" aria-selected="true" aria-controls="till-pane">Till</button>
-    <button id="tab-office" role="tab" aria-selected="false" aria-controls="office-pane">Back office</button>
+    <button id="tab-till" role="tab" aria-selected="true" aria-controls="till-pane" data-i18n="till">Till</button>
+    <button id="tab-office" role="tab" aria-selected="false" aria-controls="office-pane" data-i18n="office">Back office</button>
   </div>
   <div class="tools">
+    <div class="lang" role="group" aria-label="Language / اللغة"><button id="lang-en" lang="en" aria-pressed="true">EN</button><button id="lang-ar" lang="ar" aria-pressed="false">عربي</button></div>
     <button class="tool" id="offline" aria-pressed="false" title="Cut the till off from the server to see sales queue up"><span class="dot" aria-hidden="true"></span><span id="offline-label">Till online</span></button>
-    <button class="tool" id="reset" title="Start the demo shop again">Reset<span class="hide-sm">&nbsp;shop</span></button>
-    <button class="tool" id="help">How to try it</button>
+    <button class="tool" id="reset" title="Start the demo shop again" data-i18n="reset">Reset<span class="hide-sm">&nbsp;shop</span></button>
+    <button class="tool" id="help" data-i18n="help">How to try it</button>
   </div>
 </div>
 
@@ -70,9 +83,10 @@ dialog.tips::backdrop { background: rgb(15 23 42 / .5); }
 </div>
 
 <dialog class="tips" id="tips" aria-labelledby="tips-title">
+  <div data-lang="en">
   <header><h2 id="tips-title">Try Shah’s Corner Shop</h2></header>
   <div class="body">
-    <p style="margin:0">This is the real Counter till and back office, running in your browser with a demo shop’s data. Everything you do here stays on this page.</p>
+    <p style="margin:0">This is the real Counter till and back office, running in your browser with a demo shop’s data. Everything you do here stays on this page. Choose <b>عربي</b> at the top for Arabic.</p>
     <h3>On the till</h3>
     <ol>
       <li>Tap <b>Sam</b> and enter PIN <kbd>1111</kbd>. The till is already open for the day.</li>
@@ -86,13 +100,38 @@ dialog.tips::backdrop { background: rgb(15 23 42 / .5); }
     <h3>In the back office</h3>
     <ol>
       <li>You’re signed in as the owner. Sales you make on the till show in <b>Overview</b> and <b>Sales</b>.</li>
-      <li><b>Supplier invoices</b>: check the Booker invoice line by line, then book it into stock.</li>
+      <li><b>Supplier invoices</b>: upload a photo or PDF of a real invoice (Booker, Parfetts, Bestway…). Claude reads it — the first time, allow Claude to use your account. Then tap <b>Create all missing products</b> and <b>Book into stock</b>. Next time the same supplier codes match by themselves.</li>
       <li><b>Ordering</b>: approve staff requests and turn the shopping list into orders.</li>
       <li>Change a price in <b>Products</b>. The till picks it up on its next sync.</li>
     </ol>
     <p class="note">Demo only: no real payments are taken and nothing is saved. Reset or reload the page to start again. Back-office sign-in, if asked: owner@cornershop.demo / demo-password-1.</p>
   </div>
-  <footer><button id="tips-close" autofocus>Start</button></footer>
+  </div>
+  <div data-lang="ar" hidden>
+  <header><h2 id="tips-title-ar">جرّب متجر شاه</h2></header>
+  <div class="body">
+    <p style="margin:0">هذا هو جهاز الكاشير والمكتب الخلفي الحقيقيان لنظام Counter، يعملان في متصفحك ببيانات متجر تجريبي. كل ما تفعله هنا يبقى في هذه الصفحة.</p>
+    <h3>على الكاشير</h3>
+    <ol>
+      <li>اضغط <b>Sam</b> وأدخل الرمز <kbd>1111</kbd>. الصندوق مفتوح لليوم.</li>
+      <li>اضغط على المنتجات لإضافتها. <b>Coca-Cola</b> عبوة بسعر مطبوع، فلا يُحسب عليها أكثر من £1.65 المطبوعة.</li>
+      <li>أضف <b>Stella Artois</b> لترى فحص العمر Challenge 25.</li>
+      <li>أعطِ خصمًا أكثر من 5% لترى موافقة المدير: اختر <b>Mo</b> والرمز <kbd>2222</kbd>.</li>
+      <li>اضغط <b>الدفع</b>، وخذ نقدًا أو بطاقة، وشاهد الإيصال.</li>
+      <li>أوقف <b>Till online</b>، وأتمّ عملية بيع، ثم أعد تشغيله. تنتظر العملية على الجهاز ثم تُزامَن.</li>
+      <li>افتح <b>القائمة</b> للمرتجعات وإقفال الصندوق ووضع التدريب. رمز المالكة Priya هو <kbd>9999</kbd>.</li>
+    </ol>
+    <h3>في المكتب الخلفي</h3>
+    <ol>
+      <li>أنت مسجّل الدخول كمالك. المبيعات التي تتم على الكاشير تظهر في <b>نظرة عامة</b> و<b>المبيعات</b>.</li>
+      <li><b>فواتير الموردين</b>: ارفع صورة أو ملف PDF لفاتورة حقيقية (Booker أو Parfetts أو Bestway…). يقرؤها Claude — في المرة الأولى اسمح لـ Claude باستخدام حسابك. ثم اضغط <b>إنشاء كل المنتجات الناقصة</b> و<b>إدخال إلى المخزون</b>. في المرة القادمة تُطابَق رموز المورد نفسها تلقائيًا.</li>
+      <li><b>الطلبات</b>: وافق على طلبات الموظفين وحوّل قائمة التسوق إلى طلبات شراء.</li>
+      <li>غيّر سعرًا في <b>المنتجات</b>. يستلمه الكاشير في المزامنة التالية.</li>
+    </ol>
+    <p class="note">عرض تجريبي فقط: لا تُؤخذ مدفوعات حقيقية ولا يُحفظ شيء. أعد التشغيل أو حدّث الصفحة للبدء من جديد. تسجيل الدخول للمكتب الخلفي عند الطلب: owner@cornershop.demo / demo-password-1.</p>
+  </div>
+  </div>
+  <footer><button id="tips-close" autofocus data-i18n="start">Start</button></footer>
 </dialog>
 
 <script src="data.js"></script>
@@ -116,12 +155,40 @@ dialog.tips::backdrop { background: rgb(15 23 42 / .5); }
   var off = document.getElementById('offline');
   off.onclick = function () {
     var v = !window.__demo.offline; window.__demo.setOffline(v);
-    off.setAttribute('aria-pressed', String(v)); document.getElementById('offline-label').textContent = v ? 'Till offline' : 'Till online';
+    off.setAttribute('aria-pressed', String(v)); document.getElementById('offline-label').textContent = TXT[lang][v ? 'off' : 'on'];
   };
   document.getElementById('reset').onclick = function () { location.replace(window.__START_URL__); };
   var tips = document.getElementById('tips');
   document.getElementById('help').onclick = function () { tips.showModal(); };
   document.getElementById('tips-close').onclick = function () { tips.close(); };
+  var TXT = {
+    en: { till: 'Till', office: 'Back office', reset: 'Reset<span class="hide-sm">&nbsp;shop</span>', help: 'How to try it', start: 'Start', on: 'Till online', off: 'Till offline' },
+    ar: { till: 'الكاشير', office: 'المكتب الخلفي', reset: 'إعادة<span class="hide-sm">&nbsp;المتجر</span>', help: 'طريقة التجربة', start: 'ابدأ', on: 'الكاشير متصل', off: 'الكاشير غير متصل' }
+  };
+  var lang = 'en';
+  try { lang = localStorage.getItem('counter.lang') === 'ar' ? 'ar' : 'en'; } catch (e) { /* storage blocked */ }
+  function applyBar() {
+    var T = TXT[lang], dir = lang === 'ar' ? 'rtl' : 'ltr';
+    document.getElementById('bar').dir = dir; tips.dir = dir;
+    document.querySelectorAll('[data-i18n]').forEach(function (el) { el.innerHTML = T[el.getAttribute('data-i18n')]; });
+    document.getElementById('offline-label').textContent = window.__demo.offline ? T.off : T.on;
+    document.querySelectorAll('.tips [data-lang]').forEach(function (el) { el.hidden = el.getAttribute('data-lang') !== lang; });
+    tips.setAttribute("aria-labelledby", lang === "ar" ? "tips-title-ar" : "tips-title");
+    document.getElementById('lang-en').setAttribute('aria-pressed', String(lang === 'en'));
+    document.getElementById('lang-ar').setAttribute('aria-pressed', String(lang === 'ar'));
+  }
+  function setLang(l) {
+    lang = l;
+    try { localStorage.setItem('counter.lang', l); } catch (e) { /* ignore */ }
+    applyBar();
+    if (window.__officeLang && window.__officeLang.lang !== l) window.__officeLang.setLang(l);
+    if (window.__counterSetLanguage) window.__counterSetLanguage(l);
+  }
+  window.__onOfficeLang = function (l) { if (l !== lang) { lang = l; try { localStorage.setItem('counter.lang', l); } catch (e) {} applyBar(); if (window.__counterSetLanguage) window.__counterSetLanguage(l); } };
+  window.__demoLang = function () { return lang; };
+  document.getElementById('lang-en').onclick = function () { setLang('en'); };
+  document.getElementById('lang-ar').onclick = function () { setLang('ar'); };
+  applyBar();
   try { tips.showModal(); } catch (e) { /* older browser: guide stays available from the button */ }
 })();
 </script>

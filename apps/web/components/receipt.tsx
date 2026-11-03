@@ -12,7 +12,7 @@ export function Receipt({ sale, staffName }: { sale: any; staffName?: string }) 
     v.gross += l.line_total_pence; v.vat += l.vat_pence; vat.set(l.vat_code, v);
   }
   return (
-    <div className="mx-auto max-w-sm rounded-lg border border-dashed border-line bg-white px-6 py-5 font-mono text-[13px] leading-relaxed shadow-inner">
+    <div dir="ltr" lang="en-GB" className="mx-auto max-w-sm rounded-lg border border-dashed border-line bg-white px-6 py-5 font-mono text-[13px] leading-relaxed shadow-inner">
       <div className="text-center">
         <p className="font-sans text-base font-bold">{me?.tenant.trading_name ?? me?.tenant.legal_name}</p>
         <p>{branch?.name}</p>

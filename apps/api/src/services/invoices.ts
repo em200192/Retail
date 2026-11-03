@@ -4,6 +4,7 @@ import { enqueueEvent } from '../lib/outbox.ts';
 import { type MovementInput, postMovements } from '../lib/stock.ts';
 import type { OcrInvoice } from '../integrations/ocr.ts';
 import { updateCosts } from '../routes/stock.ts';
+import { productNameFromInvoice } from '@retail/shared';
 
 /** Thresholds for auto-matching invoice lines. */
 export const MATCH = {
@@ -109,7 +110,7 @@ export async function applyExtraction(tx: Tx, tenantId: string, invoiceId: strin
     rows.push({
       tenant_id: tenantId, invoice_id: invoiceId, line_no: i + 1, raw_text: l.raw_text, supplier_code: l.supplier_code,
       barcode: l.barcode, description: l.description, quantity: l.quantity, pack_size: l.pack_size ?? m.packSize,
-      unit_cost_pence: l.unit_cost_pence, line_total_pence: l.line_total_pence, vat_code: l.vat_code, is_pmp: l.is_pmp,
+      unit_cost_pence: l.unit_cost_pence, line_total_pence: l.line_total_pence, rrp_pence: l.rrp_pence ?? null, vat_code: l.vat_code, is_pmp: l.is_pmp,
       pmp_price_pence: l.pmp_price_pence, expiry_date: l.expiry_date,
       product_id: m.status === 'matched_auto' ? m.productId : null, match_status: m.status, match_confidence: m.confidence,
     });
@@ -151,32 +152,44 @@ export async function postInvoice(tx: Tx, tenantId: string, invoiceId: string, s
   const open = lines.filter((l) => l.match_status !== 'ignored' && !l.product_id);
   if (open.length) throw unprocessable(`${open.length} line(s) still need a product (or mark them ignored)`, { line_ids: open.map((l) => l.id) });
 
-  const movements: MovementInput[] = [];
+  // Net every line per product first, so a VOID NOTE / negative line cancels
+  // what it voids instead of blocking the post.
+  const perProduct = new Map<string, { units: number; cost: number; costedUnits: number; expiry: string | null;
+    trackExpiry: boolean; codes: { code: string; description: string; pack: number; caseCost: number | null }[] }>();
   for (const l of lines) {
     if (l.match_status === 'ignored' || !l.product_id) continue;
     const qty = l.quantity ?? 0;
-    if (qty <= 0) throw unprocessable(`Line "${l.description}" has no quantity`);
+    if (qty === 0) continue;
     const pack = l.pack_size && l.pack_size > 0 ? l.pack_size : 1;
-    const units = Math.round(qty * pack * 1000) / 1000;
+    const units = qty * pack;
     const caseCost = l.unit_cost_pence ?? (l.line_total_pence != null ? Math.round(l.line_total_pence / qty) : null);
-    const unitCost = caseCost != null ? Math.round(caseCost / pack) : null;
-
+    const p = perProduct.get(l.product_id) ?? { units: 0, cost: 0, costedUnits: 0, expiry: null, trackExpiry: !!l.track_expiry, codes: [] };
+    p.units += units;
+    if (caseCost != null) { p.cost += Math.round((caseCost / pack) * units); p.costedUnits += units; }
+    if (l.expiry_date && (!p.expiry || l.expiry_date < p.expiry)) p.expiry = l.expiry_date;
+    if (l.supplier_code && qty > 0) p.codes.push({ code: l.supplier_code, description: l.description, pack, caseCost });
+    perProduct.set(l.product_id, p);
+  }
+  const movements: MovementInput[] = [];
+  for (const [productId, p] of perProduct) {
+    const units = Math.round(p.units * 1000) / 1000;
+    if (units <= 0) continue; // fully voided / returned
+    const unitCost = p.costedUnits > 0 ? Math.round(p.cost / p.costedUnits) : null;
     let batchId: string | null = null;
-    if (l.track_expiry && l.expiry_date) {
+    if (p.trackExpiry && p.expiry) {
       const [b] = await tx<{ id: string }[]>`
         INSERT INTO stock_batches (tenant_id, branch_id, product_id, supplier_invoice_id, expiry_date, qty_received, qty_remaining, unit_cost_pence)
-        VALUES (${tenantId}, ${inv.branch_id}, ${l.product_id}, ${invoiceId}, ${l.expiry_date}, ${units}, ${units}, ${unitCost}) RETURNING id`;
+        VALUES (${tenantId}, ${inv.branch_id}, ${productId}, ${invoiceId}, ${p.expiry}, ${units}, ${units}, ${unitCost}) RETURNING id`;
       batchId = b!.id;
     }
-    if (unitCost != null) await updateCosts(tx, inv.branch_id, l.product_id, units, unitCost);
-    movements.push({ branchId: inv.branch_id, productId: l.product_id, quantity: units, movementType: 'receipt',
+    if (unitCost != null) await updateCosts(tx, inv.branch_id, productId, units, unitCost);
+    movements.push({ branchId: inv.branch_id, productId, quantity: units, movementType: 'receipt',
       unitCostPence: unitCost, referenceType: 'supplier_invoice', referenceId: invoiceId, batchId, staffId, deviceId });
-
-    if (l.supplier_code) {
+    for (const c of p.codes) {
       await tx`
         INSERT INTO supplier_products (tenant_id, supplier_id, product_id, supplier_code, supplier_description, pack_size,
                                        case_cost_pence, last_cost_at, match_source)
-        VALUES (${tenantId}, ${inv.supplier_id}, ${l.product_id}, ${l.supplier_code}, ${l.description}, ${pack}, ${caseCost}, now(), 'ocr_confirmed')
+        VALUES (${tenantId}, ${inv.supplier_id}, ${productId}, ${c.code}, ${c.description}, ${c.pack}, ${c.caseCost}, now(), 'ocr_confirmed')
         ON CONFLICT (tenant_id, supplier_id, supplier_code) DO UPDATE SET
           product_id = EXCLUDED.product_id, pack_size = EXCLUDED.pack_size, case_cost_pence = EXCLUDED.case_cost_pence,
           last_cost_at = now(), supplier_description = EXCLUDED.supplier_description,
@@ -184,8 +197,8 @@ export async function postInvoice(tx: Tx, tenantId: string, invoiceId: string, s
     }
     if (inv.purchase_order_id) {
       await tx`
-        UPDATE purchase_order_lines SET qty_received = qty_received + ${l.quantity}
-        WHERE id = (SELECT id FROM purchase_order_lines WHERE purchase_order_id = ${inv.purchase_order_id} AND product_id = ${l.product_id} LIMIT 1)`;
+        UPDATE purchase_order_lines SET qty_received = qty_received + ${units}
+        WHERE id = (SELECT id FROM purchase_order_lines WHERE purchase_order_id = ${inv.purchase_order_id} AND product_id = ${productId} LIMIT 1)`;
     }
   }
   await postMovements(tx, tenantId, movements);
@@ -202,4 +215,56 @@ export async function postInvoice(tx: Tx, tenantId: string, invoiceId: string, s
     WHERE id = ${invoiceId} RETURNING *`;
   await enqueueEvent(tx, tenantId, 'invoice.posted', 'supplier_invoice', invoiceId, { invoice_id: invoiceId, branch_id: inv.branch_id });
   return { invoice: posted, lines_received: movements.length };
+}
+
+/**
+ * Creates a product from an invoice line the shop doesn't stock yet: tidy
+ * name, the line's barcode (PMP when price-marked), VAT code, and a shelf
+ * price from the price mark / RRP. The line is then matched to it.
+ */
+export async function createProductFromLine(tx: Tx, tenantId: string, staffId: string, invoiceId: string, lineId: string,
+  overrides: { name?: string; vat_code?: string; category_id?: string | null; price_pence?: number | null } = {}) {
+  const [l] = await tx<{ id: string; description: string; barcode: string | null; vat_code: string | null; is_pmp: boolean | null;
+    pmp_price_pence: number | null; rrp_pence: number | null; product_id: string | null; match_status: string; pack_size: number | null;
+    unit_cost_pence: number | null }[]>`
+    SELECT id, description, barcode, vat_code, is_pmp, pmp_price_pence, rrp_pence, product_id, match_status, pack_size, unit_cost_pence
+    FROM supplier_invoice_lines WHERE id = ${lineId} AND invoice_id = ${invoiceId}`;
+  if (!l) throw notFound('Invoice line');
+  if (l.match_status === 'ignored') throw conflict('This line is ignored');
+  const name = (overrides.name ?? productNameFromInvoice(l.description)).trim();
+  if (!name) throw unprocessable('Enter a product name');
+  if (l.barcode) {
+    const [taken] = await tx<{ product_id: string }[]>`SELECT product_id FROM product_barcodes WHERE barcode = ${l.barcode}`;
+    if (taken) throw conflict('A product with this barcode already exists — match the line to it instead', { product_id: taken.product_id });
+  }
+  const vat = overrides.vat_code ?? l.vat_code ?? 'S';
+  const [p] = await tx<{ id: string; name: string }[]>`
+    INSERT INTO products (tenant_id, name, vat_code, category_id, last_cost_pence)
+    VALUES (${tenantId}, ${name}, ${vat}, ${overrides.category_id ?? null},
+            ${l.unit_cost_pence != null ? Math.round(l.unit_cost_pence / (l.pack_size || 1)) : null})
+    RETURNING id, name`;
+  if (l.barcode) {
+    await tx`
+      INSERT INTO product_barcodes (tenant_id, product_id, barcode, barcode_type, is_primary, is_pmp, pmp_price_pence)
+      VALUES (${tenantId}, ${p!.id}, ${l.barcode}, ${l.barcode.length === 8 ? 'EAN8' : l.barcode.length === 14 ? 'ITF14' : 'EAN13'}, true,
+              ${!!(l.is_pmp && l.pmp_price_pence)}, ${l.is_pmp ? l.pmp_price_pence : null})`;
+  }
+  const price = overrides.price_pence !== undefined ? overrides.price_pence : (l.is_pmp && l.pmp_price_pence ? l.pmp_price_pence : l.rrp_pence);
+  if (price != null) {
+    await tx`
+      INSERT INTO product_prices (tenant_id, product_id, price_level_id, price_pence, created_by)
+      SELECT ${tenantId}, ${p!.id}, id, ${price}, ${staffId} FROM price_levels WHERE is_default`;
+  }
+  await tx`
+    UPDATE supplier_invoice_lines SET product_id = ${p!.id}, match_status = 'new_product_created', match_confidence = 1, matched_by = ${staffId}
+    WHERE id = ${lineId}`;
+  // Other lines for the same supplier code on this invoice (repeats, voids) are the same product.
+  const [code] = await tx<{ supplier_code: string | null }[]>`SELECT supplier_code FROM supplier_invoice_lines WHERE id = ${lineId}`;
+  if (code?.supplier_code) {
+    await tx`
+      UPDATE supplier_invoice_lines SET product_id = ${p!.id}, match_status = 'new_product_created', match_confidence = 1, matched_by = ${staffId}
+      WHERE invoice_id = ${invoiceId} AND supplier_code = ${code.supplier_code} AND product_id IS NULL AND match_status <> 'ignored'`;
+  }
+  await enqueueEvent(tx, tenantId, 'product.changed', 'product', p!.id, { product_id: p!.id, action: 'created' });
+  return { product_id: p!.id, name: p!.name, price_pence: price ?? null };
 }

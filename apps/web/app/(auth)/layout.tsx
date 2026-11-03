@@ -1,4 +1,7 @@
+'use client';
 import { CheckCircle2 } from 'lucide-react';
+import { LanguageSwitch } from '@/lib/i18n';
+import { t } from '@/lib/i18n';
 
 const POINTS = [
   'Works offline at the till — sales sync the moment you are back online',
@@ -13,19 +16,20 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="absolute inset-0 bg-[radial-gradient(80%_60%_at_10%_0%,#13948C_0%,transparent_60%),radial-gradient(60%_50%_at_100%_100%,#F2A90033_0%,transparent_60%)]" aria-hidden />
         <div className="relative flex items-center gap-2.5">
           <div className="grid size-9 place-items-center rounded-lg bg-accent text-ink font-bold" aria-hidden>C</div>
-          <span className="text-xl font-semibold tracking-tight">Counter</span>
+          <span className="text-xl font-semibold tracking-tight">{t("Counter")}</span>
         </div>
         <div className="relative max-w-md">
-          <h1 className="text-4xl font-semibold leading-tight tracking-tight">The till and back office built for UK corner shops.</h1>
+          <h1 className="text-4xl font-semibold leading-tight tracking-tight">{t("The till and back office built for UK corner shops.")}</h1>
           <ul className="mt-8 space-y-4">
             {POINTS.map((p) => (
-              <li key={p} className="flex gap-3 text-white/85"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-accent" aria-hidden />{p}</li>
+              <li key={p} className="flex gap-3 text-white/85"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-accent" aria-hidden />{t(p)}</li>
             ))}
           </ul>
         </div>
-        <p className="relative text-sm text-white/60">Your data is stored in the UK and handled under UK GDPR.</p>
+        <p className="relative text-sm text-white/60">{t("Your data is stored in the UK and handled under UK GDPR.")}</p>
       </section>
-      <main className="flex items-center justify-center p-6 sm:p-12 bg-surface">
+      <main className="relative flex items-center justify-center p-6 sm:p-12 bg-surface">
+        <LanguageSwitch className="absolute end-6 top-6" />
         <div className="w-full max-w-md animate-rise">{children}</div>
       </main>
     </div>

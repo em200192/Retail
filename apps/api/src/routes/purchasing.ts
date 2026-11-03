@@ -4,12 +4,12 @@ import { z } from 'zod';
 import { type Deps, tenantTx } from '../app.ts';
 import { can, requireAnyPermission, requireBranchAccess, requireBranchExists, requirePermission } from '../lib/authz.ts';
 import type { Tx } from '../lib/db.ts';
-import { conflict, forbidden, notFound, unprocessable } from '../lib/errors.ts';
+import { conflict, forbidden, HttpError, notFound, unprocessable } from '../lib/errors.ts';
 import { enqueueEvent } from '../lib/outbox.ts';
 import { idParam, isoDate, parse, pence, uuid } from '../lib/validate.ts';
 import { storageKeyFor } from '../integrations/files.ts';
 import { ocrInvoiceSchema } from '../integrations/ocr.ts';
-import { applyExtraction, postInvoice } from '../services/invoices.ts';
+import { applyExtraction, createProductFromLine, postInvoice } from '../services/invoices.ts';
 
 const supplierSchema = z.object({
   name: z.string().min(1), global_supplier_id: uuid.nullish(), account_number: z.string().nullish(),
@@ -332,14 +332,15 @@ export async function purchasingRoutes(app: FastifyInstance, deps: Deps) {
   });
 
   // ------------------------------------------------------------ supplier invoices (OCR)
-  app.post('/v1/invoices', async (req, reply) => {
+  // Photos and PDFs of multi-page invoices arrive base64-encoded: allow up to 30 MB.
+  app.post('/v1/invoices', { bodyLimit: 30 * 1024 * 1024 }, async (req, reply) => {
     const body = parse(z.object({
       branch_id: uuid, file_name: z.string().min(1), mime_type: z.enum(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']),
       content_base64: z.string().min(1), purchase_order_id: uuid.nullish(),
     }), req.body);
     if (!deps.files) throw unprocessable('File storage is not configured');
     const bytes = Buffer.from(body.content_base64, 'base64');
-    if (bytes.length > 20 * 1024 * 1024) throw unprocessable('File is larger than 20 MB');
+    if (bytes.length > 20 * 1024 * 1024) throw unprocessable('The file must be smaller than 20 MB');
     const tenantId = req.auth!.tid;
     const key = storageKeyFor(tenantId, 'invoices', body.file_name);
     await deps.files.put(key, bytes, body.mime_type);
@@ -439,6 +440,47 @@ export async function purchasingRoutes(app: FastifyInstance, deps: Deps) {
       const [l] = await tx`UPDATE supplier_invoice_lines SET ${tx(update as never)} WHERE id = ${lineId} AND invoice_id = ${id} RETURNING *`;
       if (!l) throw notFound('Invoice line');
       return l;
+    });
+  });
+
+  // "We don't sell this yet": create a product from the line and match it.
+  app.post('/v1/invoices/:id/lines/:lineId/create-product', async (req, reply) => {
+    const { id, lineId } = parse(z.object({ id: uuid, lineId: uuid }), req.params);
+    const body = parse(z.object({ name: z.string().min(1).optional(), vat_code: z.enum(['S', 'R', 'Z', 'E']).optional(),
+      category_id: uuid.nullish(), price_pence: pence.nullish() }), req.body);
+    const out = await tenantTx(deps, req, async ({ tx, actor, tenantId }) => {
+      requirePermission(actor, 'invoices.approve', 'products.edit');
+      if (body.price_pence != null) requirePermission(actor, 'prices.edit');
+      const [inv] = await tx<{ status: string }[]>`SELECT status FROM supplier_invoices WHERE id = ${id}`;
+      if (!inv) throw notFound('Invoice');
+      if (!['needs_review', 'approved'].includes(inv.status)) throw conflict(`Invoice is ${inv.status}`);
+      return createProductFromLine(tx, tenantId, actor.staffId, id, lineId, body);
+    });
+    return reply.status(201).send(out);
+  });
+
+  // Create products for every line that still has none (first invoice from a new supplier).
+  app.post('/v1/invoices/:id/create-missing-products', async (req) => {
+    const { id } = parse(idParam, req.params);
+    return tenantTx(deps, req, async ({ tx, actor, tenantId }) => {
+      requirePermission(actor, 'invoices.approve', 'products.edit', 'prices.edit');
+      const [inv] = await tx<{ status: string }[]>`SELECT status FROM supplier_invoices WHERE id = ${id}`;
+      if (!inv) throw notFound('Invoice');
+      if (!['needs_review', 'approved'].includes(inv.status)) throw conflict(`Invoice is ${inv.status}`);
+      const open = await tx<{ id: string; barcode: string | null }[]>`
+        SELECT id, barcode FROM supplier_invoice_lines
+        WHERE invoice_id = ${id} AND product_id IS NULL AND match_status <> 'ignored' AND COALESCE(quantity, 0) > 0
+          AND COALESCE(supplier_code, barcode) IS NOT NULL
+        ORDER BY line_no`;
+      const created = [], skipped = [];
+      for (const l of open) {
+        // An earlier line with the same supplier code may already have created this product.
+        const [still] = await tx`SELECT 1 FROM supplier_invoice_lines WHERE id = ${l.id} AND product_id IS NULL`;
+        if (!still) continue;
+        try { created.push(await createProductFromLine(tx, tenantId, actor.staffId, id, l.id)); }
+        catch (e) { skipped.push({ line_id: l.id, reason: (e as Error).message }); if (!(e instanceof HttpError)) throw e; }
+      }
+      return { created, skipped };
     });
   });
 

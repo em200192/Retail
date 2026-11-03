@@ -7,7 +7,7 @@ const env = useTestApp();
 
 const invoiceLines = (overrides: Partial<OcrInvoice['lines'][number]>[]): OcrInvoice['lines'] => overrides.map((o) => ({
   raw_text: null, supplier_code: null, barcode: null, description: 'x', quantity: 1, pack_size: null, unit_cost_pence: null,
-  line_total_pence: null, vat_code: 'S', is_pmp: null, pmp_price_pence: null, expiry_date: null, ...o,
+  line_total_pence: null, rrp_pence: null, vat_code: 'S', is_pmp: null, pmp_price_pence: null, expiry_date: null, ...o,
 }));
 
 const booker = (invoiceNumber: string, lines: OcrInvoice['lines'], confidence = 0.95): OcrInvoice => ({

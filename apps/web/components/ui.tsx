@@ -2,6 +2,7 @@
 import { formatGBP, parsePounds } from '@retail/shared';
 import { Loader2, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
+import { t } from '@/lib/i18n';
 
 export function cx(...c: (string | false | null | undefined)[]) { return c.filter(Boolean).join(' '); }
 
@@ -108,11 +109,11 @@ export function Table({ children, className }: { children: React.ReactNode; clas
   );
 }
 export function Th({ children, className, align }: { children?: React.ReactNode; className?: string; align?: 'right' | 'center' }) {
-  return <th scope="col" className={cx('px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-subtle bg-surface/60 border-b border-line text-left',
-    align === 'right' && 'text-right', align === 'center' && 'text-center', className)}>{children}</th>;
+  return <th scope="col" className={cx('px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-subtle bg-surface/60 border-b border-line text-start',
+    align === 'right' && 'text-end', align === 'center' && 'text-center', className)}>{children}</th>;
 }
 export function Td({ children, className, align }: { children?: React.ReactNode; className?: string; align?: 'right' | 'center' }) {
-  return <td className={cx('px-4 py-3 border-b border-line/70', align === 'right' && 'text-right tabular', align === 'center' && 'text-center', className)}>{children}</td>;
+  return <td className={cx('px-4 py-3 border-b border-line/70', align === 'right' && 'text-end tabular', align === 'center' && 'text-center', className)}>{children}</td>;
 }
 
 export function EmptyState({ icon, title, children, action }: { icon?: React.ReactNode; title: string; children?: React.ReactNode; action?: React.ReactNode }) {
@@ -131,7 +132,7 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 export function LoadingRows({ rows = 5 }: { rows?: number }) {
-  return <div className="p-5 space-y-3" role="status" aria-label="Loading">{Array.from({ length: rows }, (_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>;
+  return <div className="p-5 space-y-3" role="status" aria-label={t("Loading")}>{Array.from({ length: rows }, (_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>;
 }
 
 export function ErrorNote({ error }: { error: unknown }) {
@@ -156,7 +157,7 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cx(inputCls, props.className)} />;
 }
 export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={cx(inputCls, 'pr-8', props.className)} />;
+  return <select {...props} className={cx(inputCls, 'pe-8', props.className)} />;
 }
 export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} className={cx(inputCls, 'h-auto py-2 min-h-20', props.className)} />;
@@ -167,9 +168,9 @@ export function MoneyInput({ value, onChange, id, ...rest }: { value: number | n
   const [text, setText] = useState(value !== null ? (value / 100).toFixed(2) : '');
   useEffect(() => { if (value === null) setText(''); }, [value]);
   return (
-    <div className="relative">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-subtle" aria-hidden>£</span>
-      <Input {...rest} id={id} inputMode="decimal" value={text} className="pl-7 tabular"
+    <div className="relative" dir="ltr">
+      <span className="absolute start-3 top-1/2 -translate-y-1/2 text-sm text-subtle" aria-hidden>£</span>
+      <Input {...rest} id={id} inputMode="decimal" value={text} className="ps-7 tabular"
         onChange={(e) => { setText(e.target.value); onChange(parsePounds(e.target.value)); }}
         onBlur={() => { const p = parsePounds(text); if (p !== null) setText((p / 100).toFixed(2)); }} />
     </div>
@@ -180,7 +181,7 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
   return (
     <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}
       className={cx('relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-40', checked ? 'bg-brand' : 'bg-slate-300')}>
-      <span className={cx('inline-block size-5 rounded-full bg-white shadow transition-transform', checked ? 'translate-x-5' : 'translate-x-0.5')} />
+      <span className={cx('inline-block size-5 rounded-full bg-white shadow transition-transform', checked ? 'translate-x-5 rtl:-translate-x-5' : 'translate-x-0.5 rtl:-translate-x-0.5')} />
     </button>
   );
 }
@@ -189,12 +190,12 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
 export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: string; count?: number }[]; value: T; onChange: (v: T) => void }) {
   return (
     <div role="tablist" className="flex gap-1 border-b border-line mb-5 overflow-x-auto">
-      {tabs.map((t) => (
-        <button key={t.id} role="tab" aria-selected={value === t.id} onClick={() => onChange(t.id)}
+      {tabs.map((it) => (
+        <button key={it.id} role="tab" aria-selected={value === it.id} onClick={() => onChange(it.id)}
           className={cx('px-3.5 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors',
-            value === t.id ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink')}>
-          {t.label}
-          {t.count !== undefined && <span className={cx('ml-2 rounded-full px-1.5 py-0.5 text-xs tabular', value === t.id ? 'bg-brand-tint' : 'bg-surface')}>{t.count}</span>}
+            value === it.id ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink')}>
+          {t(it.label)}
+          {it.count !== undefined && <span className={cx('ms-2 rounded-full px-1.5 py-0.5 text-xs tabular', value === it.id ? 'bg-brand-tint' : 'bg-surface')}>{it.count}</span>}
         </button>
       ))}
     </div>
@@ -223,7 +224,7 @@ export function Modal({ open, onClose, title, description, children, footer, wid
               <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
               {description && <p className="text-sm text-muted mt-1">{description}</p>}
             </div>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-subtle hover:bg-surface" aria-label="Close"><X className="size-5" /></button>
+            <button onClick={onClose} className="rounded-lg p-1.5 text-subtle hover:bg-surface" aria-label={t("Close")}><X className="size-5" /></button>
           </div>
           <div className="px-6 py-5 space-y-4">{children}</div>
           {footer && <div className="flex justify-end gap-2 border-t border-line bg-surface/60 px-6 py-4 rounded-b-2xl">{footer}</div>}
@@ -241,16 +242,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const push = useCallback((text: string, tone: ToastMsg['tone'] = 'success') => {
     const id = Date.now() + Math.random();
     setItems((x) => [...x, { id, tone, text }]);
-    setTimeout(() => setItems((x) => x.filter((t) => t.id !== id)), 4500);
+    setTimeout(() => setItems((x) => x.filter((it) => it.id !== id)), 4500);
   }, []);
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div aria-live="polite" className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
-        {items.map((t) => (
-          <div key={t.id} className={cx('animate-rise rounded-xl px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)] text-white max-w-sm',
-            t.tone === 'success' ? 'bg-ink' : t.tone === 'danger' ? 'bg-danger' : 'bg-muted')}>
-            {t.tone === 'success' && <span className="text-accent mr-1.5" aria-hidden>✓</span>}{t.text}
+      <div aria-live="polite" className="fixed bottom-4 end-4 z-50 flex flex-col gap-2">
+        {items.map((it) => (
+          <div key={it.id} className={cx('animate-rise rounded-xl px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)] text-white max-w-sm',
+            it.tone === 'success' ? 'bg-ink' : it.tone === 'danger' ? 'bg-danger' : 'bg-muted')}>
+            {it.tone === 'success' && <span className="text-accent me-1.5" aria-hidden>✓</span>}{it.text}
           </div>
         ))}
       </div>

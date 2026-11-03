@@ -64,6 +64,7 @@ const out = {
   requests: await get(`/v1/purchase-requests?branch_id=${b}`),
   purchaseList: await get(`/v1/purchase-list?branch_id=${b}`),
   suppliers: await get('/v1/suppliers'),
+  supplierProducts: Object.fromEntries(await Promise.all((await get('/v1/suppliers')).map(async (s: any) => [s.id, await get(`/v1/suppliers/${s.id}/products`)]))),
   purchaseOrders: await get(`/v1/purchase-orders?branch_id=${b}`),
   invoices, invoiceDetails,
   sales, saleDetails,
