@@ -57,7 +57,8 @@ describe('staff requests -> shopping list -> purchase order', () => {
 
     const sent = await mo.post(`/v1/purchase-orders/${po.id}/send`, {});
     expect(sent.body.status).toBe('sent');
-    await publishOutbox({ db: env.db });
+    // Earlier test files leave events in the shared outbox; drain it (one call publishes a batch of 50).
+    while ((await publishOutbox({ db: env.db })).published > 0) { /* keep draining */ }
     const emails = await env.db.asWorker((tx) => tx`
       SELECT to_address, template_code FROM outbound_messages WHERE tenant_id = ${shop.tenantId} AND template_code = 'purchase_order'`);
     expect(emails).toEqual([{ to_address: 'orders@bestway.example', template_code: 'purchase_order' }]);

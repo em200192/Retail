@@ -69,7 +69,10 @@ export async function syncRoutes(app: FastifyInstance, deps: Deps) {
       requirePermission(actor, 'pos.sell');
       const since = q.since ? new Date(q.since) : null;
       const serverTime = new Date().toISOString();
-      const [branch] = await tx`SELECT id, code, name, timezone, settings FROM branches WHERE id = ${pos.bid}`;
+      const [branch] = await tx`
+        SELECT id, code, name, address_line1, address_line2, city, postcode, phone, timezone, settings
+        FROM branches WHERE id = ${pos.bid}`;
+      const [tenant] = await tx`SELECT id, legal_name, trading_name, vat_number, vat_registered FROM tenants WHERE id = ${pos.tid}`;
       const [device] = await tx`SELECT id, device_no, name FROM devices WHERE id = ${pos.did}`;
       const products = await tx`
         SELECT p.id, p.name, p.name_i18n, p.category_id, p.vat_code, p.min_age, p.sold_by_weight, p.unit_type, p.track_stock,
@@ -100,12 +103,15 @@ export async function syncRoutes(app: FastifyInstance, deps: Deps) {
       return {
         server_time: serverTime,
         full: !since,
-        branch, device, products, barcodes, prices, staff,
+        tenant, branch, device, products, barcodes, prices, staff,
         categories: await tx`SELECT id, parent_id, name, name_i18n, sort_order, is_active FROM categories`,
         price_levels: await tx`SELECT id, code, name, is_default, requires_customer FROM price_levels ORDER BY sort_order`,
         barcode_rules: await tx`SELECT * FROM barcode_rules WHERE is_active`,
         vat_rates: await tx`SELECT * FROM vat_rates`,
-        tills: await tx`SELECT id, name, device_id FROM tills WHERE branch_id = ${pos.bid} AND is_active`,
+        tills: await tx`
+          SELECT t.id, t.name, t.device_id,
+                 (SELECT s.id FROM till_sessions s WHERE s.tenant_id = t.tenant_id AND s.till_id = t.id AND s.status = 'open') AS open_session_id
+          FROM tills t WHERE t.branch_id = ${pos.bid} AND t.is_active`,
         promotions: await tx`
           SELECT p.*, COALESCE((SELECT jsonb_agg(jsonb_build_object('id', g.id, 'name', g.name, 'required_qty', g.required_qty,
                    'items', (SELECT COALESCE(jsonb_agg(jsonb_build_object('product_id', i.product_id, 'category_id', i.category_id)), '[]')

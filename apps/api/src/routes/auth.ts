@@ -150,6 +150,46 @@ export async function authRoutes(app: FastifyInstance, deps: Deps) {
     return reply.status(201).send({ ...out, device_secret: secret });
   });
 
+  // Till start-up, before anyone has logged in: the device proves itself with
+  // its secret and gets the shop header (for receipts) and the staff tiles for
+  // the PIN screen. Also used to validate a pairing code.
+  app.post('/v1/devices/hello', { config: { public: true } }, async (req) => {
+    const body = parse(z.object({ device_id: uuid, device_secret: z.string().min(20) }), req.body);
+    const out = await db.asWorker(async (tx) => {
+      const [device] = await tx<{ id: string; tenant_id: string; branch_id: string; device_no: number | null; name: string;
+        kind: string; device_secret_hash: string | null }[]>`
+        SELECT d.id, d.tenant_id, d.branch_id, d.device_no, d.name, d.kind, d.device_secret_hash
+        FROM devices d JOIN tenants t ON t.id = d.tenant_id
+        WHERE d.id = ${body.device_id} AND d.is_active AND t.status NOT IN ('suspended','cancelled')`;
+      if (!device?.device_secret_hash || !safeEqualHex(hashDeviceSecret(body.device_secret), device.device_secret_hash)) return null;
+      const tid = device.tenant_id;
+      const [tenant] = await tx`
+        SELECT id, legal_name, trading_name, vat_number, vat_registered FROM tenants WHERE id = ${tid}`;
+      const [branch] = await tx`
+        SELECT id, code, name, address_line1, address_line2, city, postcode, phone, timezone
+        FROM branches WHERE tenant_id = ${tid} AND id = ${device.branch_id}`;
+      const [till] = await tx`
+        SELECT t.id, t.name,
+               (SELECT s.id FROM till_sessions s WHERE s.tenant_id = t.tenant_id AND s.till_id = t.id AND s.status = 'open') AS open_session_id
+        FROM tills t WHERE t.tenant_id = ${tid} AND t.device_id = ${device.id} AND t.is_active
+        ORDER BY t.created_at LIMIT 1`;
+      const staff = await tx`
+        SELECT s.id, s.display_name, r.system_key AS role_key, r.name AS role_name
+        FROM staff s JOIN roles r ON r.tenant_id = s.tenant_id AND r.id = s.role_id
+        WHERE s.tenant_id = ${tid} AND s.status = 'active' AND s.pos_pin_hash IS NOT NULL
+          AND (r.system_key = 'owner' OR EXISTS (SELECT 1 FROM staff_branch_access a
+               WHERE a.tenant_id = s.tenant_id AND a.staff_id = s.id AND a.branch_id = ${device.branch_id}))
+        ORDER BY s.display_name`;
+      await tx`UPDATE devices SET last_seen_at = now() WHERE tenant_id = ${tid} AND id = ${device.id}`;
+      return {
+        tenant, branch, till: till ?? null, staff,
+        device: { id: device.id, device_no: device.device_no, name: device.name, kind: device.kind },
+      };
+    });
+    if (!out) throw unauthorized('Device is not registered');
+    return out;
+  });
+
   // Staff log in on a registered device with their PIN.
   app.post('/v1/auth/pin-login', { config: { public: true } }, async (req) => {
     const body = parse(pinLoginSchema, req.body);
