@@ -9,3 +9,6 @@ coverage/
 .expo/
 expo-env.d.ts
 web-build/
+demo/build/
+demo/site/
+apps/pos/dist/

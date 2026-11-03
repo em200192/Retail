@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useMe } from '@/lib/me';
+import { hardNavigate } from '@/lib/nav';
 import { cx, Skeleton } from './ui';
 
 const NAV = [
@@ -77,7 +78,7 @@ function Brand() {
 export function Shell({ children }: { children: React.ReactNode }) {
   const { me, branchId, setBranchId } = useMe();
   const [open, setOpen] = useState(false);
-  const signOut = async () => { await fetch('/api/session', { method: 'DELETE' }); window.location.href = '/login'; };
+  const signOut = async () => { await fetch('/api/session', { method: 'DELETE' }); hardNavigate('/login'); };
   return (
     <div className="min-h-screen lg:pl-64">
       <a href="#main" className="skip-link">Skip to main content</a>

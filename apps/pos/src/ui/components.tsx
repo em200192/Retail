@@ -207,7 +207,7 @@ export function Sheet({ visible, onClose, title, children, width = 560, footer, 
               </Pressable>
             ) : null}
           </Row>
-          <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: space.md }} keyboardShouldPersistTaps="handled">{children}</ScrollView>
+          <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ gap: space.md }} keyboardShouldPersistTaps="handled">{children}</ScrollView>
           {footer ? <View style={{ marginTop: space.lg, gap: space.sm }}>{footer}</View> : null}
         </View>
       </View>

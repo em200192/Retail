@@ -18,5 +18,9 @@
     "fastify": "^5.2.1",
     "postgres": "^3.4.5",
     "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.18",
+    "esbuild": "^0.25.5"
   }
 }

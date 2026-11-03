@@ -1,5 +1,6 @@
 'use client';
 import useSWR, { type SWRConfiguration } from 'swr';
+import { hardNavigate } from './nav';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public details?: any) { super(message); }
@@ -14,7 +15,7 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   if (res.status === 401 && typeof window !== 'undefined') {
-    window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+    hardNavigate(`/login?next=${encodeURIComponent(window.location.pathname)}`);
   }
   const text = await res.text();
   const data = text ? JSON.parse(text) : undefined;

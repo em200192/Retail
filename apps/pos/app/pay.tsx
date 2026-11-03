@@ -87,7 +87,7 @@ export default function Pay() {
         {training ? <Badge label="Training sale" tone="accent" symbol="▲" /> : null}
       </Row>
       <View style={{ flexDirection: wide ? 'row' : 'column', gap: space.lg }}>
-        <Card style={{ flex: 1, gap: space.md, padding: space.xl }}>
+        <Card style={{ flex: wide ? 1 : undefined, gap: space.md, padding: space.xl }}>
           <T v="caption" muted>{payments.length ? 'Left to pay' : 'To pay'}</T>
           <Money pence={formatGBP(Math.max(remaining, 0))} size={72} />
           <T muted>{formatGBP(totals.total)} total · {totals.items} item{totals.items === 1 ? '' : 's'} · VAT {formatGBP(totals.vat)}</T>
@@ -106,7 +106,7 @@ export default function Pay() {
           {totals.total === 0 ? <Button label="Complete sale (nothing to pay)" size="xl" onPress={() => finish([])} disabled={busy} /> : null}
         </Card>
 
-        <Card style={{ flex: 1.3, gap: space.lg, padding: space.xl }}>
+        <Card style={{ flex: wide ? 1.3 : undefined, gap: space.lg, padding: space.xl }}>
           <Segmented label="Payment method" value={method} onChange={(m) => { setMethod(m); setTyped(''); }}
             options={[{ value: 'cash', label: 'Cash' }, { value: 'card', label: 'Card' }]} />
           {cardBusy ? <PresentCard amount={typedPence > 0 ? Math.min(typedPence, remaining) : remaining} onCancel={() => abort.current?.abort()} /> : method === 'cash' ? (

@@ -1,0 +1,128 @@
+<title>Counter Demo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/*OFFICE_CSS*/
+</style>
+<style>
+/* Counter demo shell — one deliberate light look, matching the product (the apps are light-only). */
+:root {
+  --ink: #0F172A; --brand: #0B6E69; --brand-dark: #095854; --accent: #F2A900; --surface: #F7F8FA;
+  --on-ink: #FFFFFF; --on-ink-muted: #CBD5E1; --line-ink: #334155; --danger: #C62828; --focus: #FFDD00;
+  --font-inter: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: light;
+}
+html, body { height: 100%; }
+body { margin: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }
+.bar {
+  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; background: var(--ink); color: var(--on-ink);
+  padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  font: 500 14px/1.2 var(--font-inter);
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
+.logo { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: var(--ink); font-weight: 700; }
+.pill { border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 2px 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.seg { display: flex; background: #1E293B; border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { appearance: none; border: 0; background: transparent; color: var(--on-ink-muted); font: 600 14px var(--font-inter); padding: 8px 14px; border-radius: 8px; cursor: pointer; min-height: 36px; }
+.seg button[aria-selected="true"] { background: var(--on-ink); color: var(--ink); }
+.tools { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.tool { appearance: none; border: 1px solid var(--line-ink); background: transparent; color: var(--on-ink); font: 500 13px var(--font-inter); padding: 7px 11px; border-radius: 8px; cursor: pointer; min-height: 34px; display: inline-flex; align-items: center; gap: 7px; }
+.tool:hover { background: #1E293B; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #22C55E; }
+.tool[aria-pressed="true"] .dot { background: var(--danger); }
+:where(button, a):focus-visible { outline: 3px solid var(--focus); outline-offset: 0; box-shadow: inset 0 0 0 2px var(--ink); }
+#panes { flex: 1; min-height: 0; position: relative; }
+.pane { position: absolute; inset: 0; }
+#till-pane #root { display: flex; height: 100%; }
+#office-pane { transform: translateZ(0); overflow: hidden; }
+#office-scroll { position: absolute; inset: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
+dialog.tips { width: min(560px, calc(100% - 32px)); border: 0; border-radius: 16px; padding: 0; box-shadow: 0 20px 50px -15px rgb(15 23 42 / .45); font: 15px/1.5 var(--font-inter); color: var(--ink); }
+dialog.tips::backdrop { background: rgb(15 23 42 / .5); }
+.tips header { padding: 20px 22px 6px; } .tips h2 { margin: 0; font-size: 19px; text-wrap: balance; }
+.tips .body { padding: 6px 22px 8px; max-height: 65vh; overflow: auto; }
+.tips h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--brand); margin: 16px 0 6px; }
+.tips ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.tips kbd { font: 600 13px ui-monospace, Menlo, monospace; background: #EEF2F6; border-radius: 5px; padding: 1px 6px; }
+.tips .note { font-size: 13px; color: #475569; background: #F1F5F9; border-radius: 10px; padding: 10px 12px; margin-top: 14px; }
+.tips footer { display: flex; justify-content: flex-end; padding: 12px 22px 18px; }
+.tips footer button { appearance: none; border: 0; background: var(--brand); color: #fff; font: 600 15px var(--font-inter); padding: 11px 20px; border-radius: 10px; cursor: pointer; }
+@media (max-width: 520px) { .tools { margin-left: 0; width: 100%; } .seg { flex: 1; } .seg button { flex: 1; padding: 8px 6px; } .hide-sm { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="bar" role="banner">
+  <div class="brand"><span class="logo" aria-hidden="true">C</span>Counter <span class="pill">Demo</span></div>
+  <div class="seg" role="tablist" aria-label="Choose an app">
+    <button id="tab-till" role="tab" aria-selected="true" aria-controls="till-pane">Till</button>
+    <button id="tab-office" role="tab" aria-selected="false" aria-controls="office-pane">Back office</button>
+  </div>
+  <div class="tools">
+    <button class="tool" id="offline" aria-pressed="false" title="Cut the till off from the server to see sales queue up"><span class="dot" aria-hidden="true"></span><span id="offline-label">Till online</span></button>
+    <button class="tool" id="reset" title="Start the demo shop again">Reset<span class="hide-sm">&nbsp;shop</span></button>
+    <button class="tool" id="help">How to try it</button>
+  </div>
+</div>
+
+<div id="panes">
+  <section id="till-pane" class="pane" role="tabpanel" aria-labelledby="tab-till"><div id="root"></div></section>
+  <section id="office-pane" class="pane" role="tabpanel" aria-labelledby="tab-office" hidden><div id="office-scroll"><div id="office"></div></div></section>
+</div>
+
+<dialog class="tips" id="tips" aria-labelledby="tips-title">
+  <header><h2 id="tips-title">Try Shah’s Corner Shop</h2></header>
+  <div class="body">
+    <p style="margin:0">This is the real Counter till and back office, running in your browser with a demo shop’s data. Everything you do here stays on this page.</p>
+    <h3>On the till</h3>
+    <ol>
+      <li>Tap <b>Sam</b> and enter PIN <kbd>1111</kbd>. The till is already open for the day.</li>
+      <li>Tap items to add them. <b>Coca-Cola</b> is a price-marked pack, so it never charges more than the £1.65 printed on it.</li>
+      <li>Add <b>Stella Artois</b> to see the Challenge 25 check.</li>
+      <li>Give a discount over 5% to see manager approval: choose <b>Mo</b>, PIN <kbd>2222</kbd>.</li>
+      <li>Tap <b>Pay</b>, take cash or card, and see the UK receipt.</li>
+      <li>Turn <b>Till online</b> off, make a sale, then turn it back on. The sale waits on the till and syncs.</li>
+      <li>Open <b>Menu</b> for refunds, no-sales, cash-up and training mode. Owner Priya’s PIN is <kbd>9999</kbd>.</li>
+    </ol>
+    <h3>In the back office</h3>
+    <ol>
+      <li>You’re signed in as the owner. Sales you make on the till show in <b>Overview</b> and <b>Sales</b>.</li>
+      <li><b>Supplier invoices</b>: check the Booker invoice line by line, then book it into stock.</li>
+      <li><b>Ordering</b>: approve staff requests and turn the shopping list into orders.</li>
+      <li>Change a price in <b>Products</b>. The till picks it up on its next sync.</li>
+    </ol>
+    <p class="note">Demo only: no real payments are taken and nothing is saved. Reset or reload the page to start again. Back-office sign-in, if asked: owner@cornershop.demo / demo-password-1.</p>
+  </div>
+  <footer><button id="tips-close" autofocus>Start</button></footer>
+</dialog>
+
+<script src="data.js"></script>
+<script src="backend.js"></script>
+<script>
+  window.__START_URL__ = location.href;
+  window.__demo.signedIn = true;
+</script>
+<script src="office.js"></script>
+<script>
+(function () {
+  var tabs = { till: document.getElementById('tab-till'), office: document.getElementById('tab-office') };
+  var panes = { till: document.getElementById('till-pane'), office: document.getElementById('office-pane') };
+  var officeMounted = false;
+  function show(which) {
+    ['till', 'office'].forEach(function (k) { tabs[k].setAttribute('aria-selected', String(k === which)); panes[k].hidden = k !== which; });
+    if (which === 'office' && !officeMounted) { officeMounted = true; window.mountOffice(document.getElementById('office')); }
+  }
+  tabs.till.onclick = function () { show('till'); };
+  tabs.office.onclick = function () { show('office'); };
+  var off = document.getElementById('offline');
+  off.onclick = function () {
+    var v = !window.__demo.offline; window.__demo.setOffline(v);
+    off.setAttribute('aria-pressed', String(v)); document.getElementById('offline-label').textContent = v ? 'Till offline' : 'Till online';
+  };
+  document.getElementById('reset').onclick = function () { location.replace(window.__START_URL__); };
+  var tips = document.getElementById('tips');
+  document.getElementById('help').onclick = function () { tips.showModal(); };
+  document.getElementById('tips-close').onclick = function () { tips.close(); };
+  try { tips.showModal(); } catch (e) { /* older browser: guide stays available from the button */ }
+})();
+</script>
+<script src="pos.js"></script>
