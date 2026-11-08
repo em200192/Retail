@@ -4,6 +4,7 @@ import { type Deps, tenantTx } from '../app.ts';
 import { requireBranchExists, requirePermission } from '../lib/authz.ts';
 import { hashDeviceSecret, hashSecret, newDeviceSecret, safeEqualHex, signToken, verifySecret } from '../lib/crypto.ts';
 import { conflict, forbidden, unauthorized } from '../lib/errors.ts';
+import { limiters } from '../lib/ratelimit.ts';
 import { parse, uuid } from '../lib/validate.ts';
 
 const branchCode = z.string().regex(/^[A-Za-z0-9]{2,8}$/, '2-8 letters/digits (used in receipt numbers)');
@@ -51,6 +52,8 @@ export async function authRoutes(app: FastifyInstance, deps: Deps) {
   // roles/limits/price levels + first branch + owner staff, in ONE transaction.
   app.post('/v1/auth/signup', { config: { public: true } }, async (req, reply) => {
     const body = parse(signupSchema, req.body);
+    limiters.signupIp.check(req.ip);
+    limiters.signupIp.fail(req.ip);
     const passwordHash = await hashSecret(body.password);
     const result = await db.asWorker(async (tx) => {
       const [existing] = await tx`SELECT 1 FROM users WHERE email = ${body.email}`;
@@ -96,6 +99,9 @@ export async function authRoutes(app: FastifyInstance, deps: Deps) {
   // Back-office login. A person can work for several shops (tenants).
   app.post('/v1/auth/login', { config: { public: true } }, async (req) => {
     const body = parse(loginSchema, req.body);
+    const emailKey = body.email.trim().toLowerCase();
+    limiters.loginIp.check(req.ip);
+    limiters.loginEmail.check(emailKey);
     const found = await db.asWorker(async (tx) => {
       const [user] = await tx<{ id: string; password_hash: string | null }[]>`
         SELECT id, password_hash FROM users WHERE email = ${body.email}`;
@@ -110,7 +116,11 @@ export async function authRoutes(app: FastifyInstance, deps: Deps) {
       await tx`UPDATE users SET last_login_at = now() WHERE id = ${user.id}`;
       return { userId: user.id, memberships };
     });
-    if (!found) throw unauthorized('Email or password is incorrect');
+    if (!found) {
+      limiters.loginIp.fail(req.ip); limiters.loginEmail.fail(emailKey);
+      throw unauthorized('Email or password is incorrect');
+    }
+    limiters.loginEmail.succeed(emailKey);
     const { memberships } = found;
     if (memberships.length === 0) throw forbidden('You do not have access to any shop');
     const chosen = body.tenant_id ? memberships.find((m) => m.tenant_id === body.tenant_id)
@@ -197,6 +207,9 @@ export async function authRoutes(app: FastifyInstance, deps: Deps) {
   // Staff log in on a registered device with their PIN.
   app.post('/v1/auth/pin-login', { config: { public: true } }, async (req) => {
     const body = parse(pinLoginSchema, req.body);
+    const pinKey = `${body.device_id}:${body.staff_id}`;
+    limiters.pinDevice.check(body.device_id);
+    limiters.pin.check(pinKey);
     const result = await db.asWorker(async (tx) => {
       const [device] = await tx<{ tenant_id: string; branch_id: string; device_secret_hash: string | null }[]>`
         SELECT d.tenant_id, d.branch_id, d.device_secret_hash
@@ -217,10 +230,12 @@ export async function authRoutes(app: FastifyInstance, deps: Deps) {
       return { tenantId: device.tenant_id, branchId: device.branch_id };
     });
     if ('error' in result) {
+      if (result.error === 'pin') { limiters.pin.fail(pinKey); limiters.pinDevice.fail(body.device_id); }
       if (result.error === 'device') throw unauthorized('Device is not registered');
       if (result.error === 'branch') throw forbidden('You are not set up to work at this branch');
       throw unauthorized('PIN is incorrect');
     }
+    limiters.pin.succeed(pinKey);
     const token = signToken({ kind: 'pos', tid: result.tenantId, sid: body.staff_id, did: body.device_id, bid: result.branchId },
       config.jwtSecret, config.posTokenTtlSeconds);
     return { token, tenant_id: result.tenantId, branch_id: result.branchId, staff_id: body.staff_id };

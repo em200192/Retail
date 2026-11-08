@@ -20,7 +20,7 @@ export interface TestEnv {
 export function useTestApp(): TestEnv {
   const env = {} as TestEnv;
   beforeAll(async () => {
-    const config = loadConfig({ NODE_ENV: 'test', DATABASE_URL: process.env.TEST_DATABASE_URL,
+    const config = loadConfig({ NODE_ENV: 'test', AUTH_RATE_LIMITS: 'off', DATABASE_URL: process.env.TEST_DATABASE_URL,
       WORKER_DATABASE_URL: process.env.TEST_WORKER_DATABASE_URL, JWT_SECRET: 'test-secret-test-secret-test-secret-123' });
     env.db = new Db(createPool(config.databaseUrl, { max: 5 }), createPool(config.workerDatabaseUrl, { max: 3 }));
     env.ocr = new MockOcrProvider();

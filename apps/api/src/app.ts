@@ -1,3 +1,4 @@
+import { setAuthRateLimits } from './lib/ratelimit.ts';
 import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import type { Config } from './config.ts';
@@ -61,7 +62,8 @@ export function requirePosToken(req: FastifyRequest): Required<Pick<TokenClaims,
 }
 
 export async function buildApp(deps: Deps, opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
-  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 5 * 1024 * 1024 });
+  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 5 * 1024 * 1024, trustProxy: deps.config.trustProxy });
+  setAuthRateLimits(deps.config.authRateLimits);
 
   await app.register(cors, { origin: deps.config.corsOrigins, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
   app.decorateRequest('auth', null);

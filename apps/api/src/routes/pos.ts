@@ -5,6 +5,7 @@ import { LIMITS, PERMISSIONS } from '@retail/shared';
 import { authoriseAction, can, requireBranchAccess, requirePermission, verifyApprover } from '../lib/authz.ts';
 import { conflict, forbidden, notFound } from '../lib/errors.ts';
 import { enqueueEvent } from '../lib/outbox.ts';
+import { limiters } from '../lib/ratelimit.ts';
 import { postMovements } from '../lib/stock.ts';
 import { idParam, isoDate, parse, pence, uuid } from '../lib/validate.ts';
 import { computeZReport } from '../services/zreport.ts';
@@ -22,9 +23,19 @@ export async function posRoutes(app: FastifyInstance, deps: Deps) {
       action_code: z.enum(PERMISSIONS), limit_code: z.enum(LIMITS).optional(), value: z.number().nonnegative().default(0),
       approver_staff_id: uuid, approver_pin: z.string().regex(/^\d{4,8}$/),
     }), req.body);
+    const key = `${pos.did}:${body.approver_staff_id}`;
+    limiters.pin.check(key);
+    limiters.pinDevice.check(pos.did);
     return tenantTx(deps, req, async ({ tx, actor }) => {
-      const approver = await verifyApprover(tx, { actor, actionCode: body.action_code, limitCode: body.limit_code, value: body.value,
-        approval: { approver_staff_id: body.approver_staff_id, approver_pin: body.approver_pin } });
+      let approver;
+      try {
+        approver = await verifyApprover(tx, { actor, actionCode: body.action_code, limitCode: body.limit_code, value: body.value,
+          approval: { approver_staff_id: body.approver_staff_id, approver_pin: body.approver_pin } });
+      } catch (e) {
+        if ((e as Error).message === 'Approval PIN is incorrect') { limiters.pin.fail(key); limiters.pinDevice.fail(pos.did); }
+        throw e;
+      }
+      limiters.pin.succeed(key);
       if (!approver.isOwner && !approver.branchIds.has(pos.bid)) throw forbidden('The approver does not work at this branch');
       const [s] = await tx<{ display_name: string }[]>`SELECT display_name FROM staff WHERE id = ${approver.staffId}`;
       return { approved_by: approver.staffId, display_name: s?.display_name ?? null, outcome: 'approved' as const };

@@ -12,6 +12,10 @@ export interface Config {
   ocrModel: string;
   /** Browser origins allowed to call the API directly (the till's web build). Comma-separated. */
   corsOrigins: string[];
+  /** Behind a load balancer: trust X-Forwarded-For (true, a hop count, or proxy addresses) so limits are per customer IP. */
+  trustProxy: boolean | string | ((addr: string, hop: number) => boolean);
+  /** Wrong-password / wrong-PIN lockouts. Only switched off in tests. */
+  authRateLimits: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -31,6 +35,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: Number(env.PORT ?? 3000),
     anthropicApiKey: env.ANTHROPIC_API_KEY || undefined,
     ocrModel: env.OCR_MODEL || 'claude-opus-5-5',
+    trustProxy: env.TRUST_PROXY === 'true' ? true
+      : env.TRUST_PROXY && /^\d+$/.test(env.TRUST_PROXY) ? ((_a: string, hop: number) => hop < Number(env.TRUST_PROXY))
+      : env.TRUST_PROXY || false,
+    authRateLimits: env.AUTH_RATE_LIMITS !== 'off',
     corsOrigins: (env.CORS_ORIGINS || 'http://localhost:8081,http://localhost:19006').split(',').map((s) => s.trim()).filter(Boolean),
   };
 }
