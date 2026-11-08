@@ -64,7 +64,7 @@ export default function TillsPage() {
 }
 
 function Row({ label, value, strong }: { label: string; value: React.ReactNode; strong?: boolean }) {
-  return <div className={`flex justify-between py-1.5 text-sm ${strong ? 'font-semibold' : ''}`}><span className={strong ? '' : 'text-muted'}>{label}</span><span className="tabular">{value}</span></div>;
+  return <div className={`flex justify-between py-1.5 text-sm ${strong ? 'font-semibold' : ''}`}><span className={strong ? '' : 'text-muted'}>{label}</span><span className="tabular" dir="ltr">{value}</span></div>;
 }
 
 function ZReport({ z, session }: { z: any; session: any }) {
@@ -84,7 +84,7 @@ function ZReport({ z, session }: { z: any; session: any }) {
       </section>
       <section>
         <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-subtle">VAT</h3>
-        {Object.entries(z.vat_by_code).map(([k, v]: [string, any]) => <Row key={k} label={`${k} · ${t('net')} ${formatGBP(v.net_pence)}`} value={formatGBP(v.vat_pence)} />)}
+        {Object.entries(z.vat_by_code).map(([k, v]: [string, any]) => <Row key={k} label={t('{code} · net {amount}', { code: k, amount: formatGBP(v.net_pence) })} value={formatGBP(v.vat_pence)} />)}
         <Row label={t("Total VAT")} value={formatGBP(z.sales.vat_pence)} strong />
         <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-subtle">{t("Cash drawer")}</h3>
         <Row label={t("Opening float")} value={formatGBP(z.opening_float_pence)} />

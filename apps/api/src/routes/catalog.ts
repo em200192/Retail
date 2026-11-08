@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { type Deps, tenantTx } from '../app.ts';
 import { requireBranchAccess, requirePermission } from '../lib/authz.ts';
 import type { Tx } from '../lib/db.ts';
-import { notFound, unprocessable } from '../lib/errors.ts';
+import { conflict, notFound, unprocessable } from '../lib/errors.ts';
 import { enqueueEvent } from '../lib/outbox.ts';
 import { idParam, isoDateTime, parse, pence, uuid, vatCode } from '../lib/validate.ts';
 import { resolveScan } from '../services/scan.ts';
@@ -227,6 +227,9 @@ export async function catalogRoutes(app: FastifyInstance, deps: Deps) {
       requirePermission(actor, 'products.edit');
       const [p] = await tx`SELECT 1 FROM products WHERE id = ${id}`;
       if (!p) throw notFound('Product');
+      const [taken] = await tx<{ name: string }[]>`
+        SELECT p.name FROM product_barcodes b JOIN products p ON p.tenant_id = b.tenant_id AND p.id = b.product_id WHERE b.barcode = ${body.barcode}`;
+      if (taken) throw conflict(`This barcode is already on ${taken.name}`, { product_name: taken.name });
       if (body.is_primary) await tx`UPDATE product_barcodes SET is_primary = false WHERE product_id = ${id}`;
       const [b] = await tx`INSERT INTO product_barcodes ${tx({ ...body, tenant_id: tenantId, product_id: id,
         pmp_price_pence: body.pmp_price_pence ?? null } as never)} RETURNING *`;

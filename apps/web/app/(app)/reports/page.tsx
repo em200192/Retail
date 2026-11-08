@@ -44,7 +44,7 @@ export default function ReportsPage() {
             {[[t('Takings'), formatGBP(sum('net_sales_pence') + sum('vat_pence'))], [t('Transactions'), sum('transactions').toLocaleString('en-GB')],
               [t('Cash / card'), `${formatGBP(sum('cash_pence'))} / ${formatGBP(sum('card_pence'))}`],
               [fin ? t('Gross profit') : t('Refunds'), fin ? formatGBP(sum('net_sales_pence') - sum('cost_of_goods_pence')) : formatGBP(sum('refunds_pence'))]].map(([l, v]) => (
-              <Card key={l} className="p-5"><p className="text-sm text-muted">{l}</p><p className="mt-1 text-2xl font-semibold tabular">{v}</p></Card>
+              <Card key={l} className="p-5"><p className="text-sm text-muted">{l}</p><p className="mt-1 text-2xl font-semibold tabular"><span dir="ltr">{v}</span></p></Card>
             ))}
           </div>
           <Card><CardHeader title={t("Daily takings")} /><div className="px-5 pb-4">{/* Wait for data: the page is prerendered at build time, so date labels must not render before then. */}{daily.isLoading || !daily.data ? <LoadingRows /> : <DailyColumns data={series} label={t("Daily takings including VAT")} />}</div></Card>

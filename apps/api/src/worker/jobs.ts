@@ -23,6 +23,8 @@ export interface OutboxEvent {
   attempts: number;
 }
 
+export const OCR_NOT_SET_UP = 'Automatic invoice reading is not switched on for this shop yet. Contact Counter support.';
+
 export const MAX_ATTEMPTS = 8;
 /** 30s, 60s, 2m, 4m ... capped at 1h. */
 export function backoffSeconds(attempts: number): number {
@@ -66,8 +68,14 @@ async function notify(deps: WorkerDeps, e: OutboxEvent) {
 const handlers: Record<string, Handler> = {
   'invoice.ocr_requested': async (deps, e) => {
     const invoiceId = String(e.payload.invoice_id);
-    if (!deps.ocr || !deps.files) return; // no OCR configured: invoice stays 'uploaded' for manual entry
     const ctx = { tenantId: e.tenant_id, staffId: null, userId: null, deviceId: null };
+    if (!deps.ocr || !deps.files) {
+      // No OCR configured (no ANTHROPIC_API_KEY): say so instead of leaving the invoice "being read" forever.
+      await deps.db.withTenant(ctx, (tx) => tx`
+        UPDATE supplier_invoices SET status = 'failed', ocr_error = ${OCR_NOT_SET_UP}
+        WHERE id = ${invoiceId} AND status IN ('uploaded', 'processing')`);
+      return;
+    }
     const inv = await deps.db.withTenant(ctx, async (tx) => {
       const [row] = await tx<{ status: string; storage_key: string; mime_type: string; parser_key: string | null }[]>`
         UPDATE supplier_invoices i SET status = 'processing'

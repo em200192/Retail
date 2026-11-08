@@ -812,5 +812,9 @@ export const AR: Record<string, string> = {
   "An account with this email already exists. Sign in instead, or use a different email.": "يوجد حساب بهذا البريد الإلكتروني بالفعل. سجّل الدخول بدلًا من ذلك، أو استخدم بريدًا آخر.",
   "No sales yet today": "لا مبيعات بعد اليوم",
   "A record with these details already exists": "يوجد سجل بهذه التفاصيل بالفعل",
-  "Invalid request": "طلب غير صالح"
+  "Invalid request": "طلب غير صالح",
+  "Short {amount}": "عجز {amount}",
+  "Over {amount}": "زيادة {amount}",
+  "{code} · net {amount}": "{code} · الصافي {amount}",
+  "Automatic invoice reading is not switched on for this shop yet. Contact Counter support.": "القراءة التلقائية للفواتير غير مفعّلة لهذا المتجر بعد. تواصل مع دعم Counter."
 };

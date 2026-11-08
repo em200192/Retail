@@ -250,7 +250,12 @@ export async function authRoutes(app: FastifyInstance, deps: Deps) {
         FROM staff s JOIN roles r ON r.tenant_id = s.tenant_id AND r.id = s.role_id WHERE s.id = ${actor.staffId}`;
       const [tenant] = await tx`
         SELECT id, legal_name, trading_name, vat_registered, vat_number, status, timezone FROM tenants WHERE id = ${tenantId}`;
-      const branches = await tx`SELECT id, code, name FROM branches WHERE is_active ORDER BY name`;
+      // Primary branch first, then in the order they were opened (the web defaults to the first).
+      const branches = await tx`
+        SELECT b.id, b.code, b.name FROM branches b
+        WHERE b.is_active
+        ORDER BY EXISTS (SELECT 1 FROM staff_branch_access a WHERE a.staff_id = ${actor.staffId} AND a.branch_id = b.id AND a.is_primary) DESC,
+                 b.created_at, b.name`;
       return {
         staff,
         tenant,
