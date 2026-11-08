@@ -12,3 +12,4 @@ web-build/
 demo/build/
 demo/site/
 apps/pos/dist/
+apps/api/.files/
