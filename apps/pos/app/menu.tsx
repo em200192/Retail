@@ -42,7 +42,7 @@ export default function Menu() {
       if (e instanceof ApiError && e.needsApproval && !approvalBody) {
         const perm = (type === 'no_sale' ? 'pos.no_sale' : 'pos.paid_out') as Permission;
         setApproval({
-          request: { action: perm, mode: 'collect', title: t('approval.title'), description: e.message },
+          request: { action: perm, mode: 'collect', title: t('approval.title'), description: t('menu.overLimit', { name: staff?.display_name ?? '' }) },
           retry: (r) => { setApproval(null); void move(type, body, r); },
         });
         return false;

@@ -7,7 +7,10 @@ import { color, font } from './theme';
 const mono = font.family;
 
 export function receiptDate(iso: string, lang: Lang = 'en'): string {
-  return fmtDate(iso, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }, lang);
+  // Arabic Intl output puts RLM marks (U+200F) between the date parts; they are strong RTL
+  // characters, so even inside an LTR isolate "08/11/2026" would print scrambled. Drop them.
+  return fmtDate(iso, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }, lang)
+    .replace(/[‎‏؜]/g, '');
 }
 
 /**

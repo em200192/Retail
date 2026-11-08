@@ -53,6 +53,8 @@ export default function Sell() {
   const [voidTarget, setVoidTarget] = useState<string | 'sale' | null>(null);
   const [approval, setApproval] = useState<ApprovalCtx>(null);
   const scanRef = useRef<TextInput>(null);
+  // Someone who cannot sell (e.g. the stock role) gets the staff tools instead ("we need this", stock check).
+  useEffect(() => { if (staff && staff.permissions.length > 0 && !can(staff, 'pos.sell')) router.replace('/staff'); }, [staff]);
 
   const { priced, totals } = useMemo(() => priceOf(basket), [basket]);
   const popular = useMemo(() => popularProducts(catalog, popularity, 15), [catalog, popularity]);

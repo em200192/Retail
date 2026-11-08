@@ -148,6 +148,13 @@ export async function pairDevice(code: string): Promise<Hello> {
 }
 
 export async function unpairDevice() {
+  // Forget everyone's login on this device too: staff tokens and cached PIN verifiers, and the recent receipts.
+  const staffIds = new Set([...state.catalog.staff.map((s) => s.id), ...(state.hello?.staff ?? []).map((s) => s.id)]);
+  for (const id of staffIds) {
+    await secure.del(pinKey(id));
+    await secure.del(`token.${id}`);
+  }
+  await kv.del('recent_sales');
   await secure.del('pairing');
   await secure.del('sync_token');
   for (const k of PERSISTED) await kv.del(`state.${k}`);
@@ -200,6 +207,8 @@ export async function login(staffId: string, pin: string): Promise<Session> {
     await secure.set('sync_token', token);
     setState({ online: true });
   } catch (err) {
+    // The server's "PIN is incorrect" is English; the till has its own words for it.
+    if (err instanceof ApiError && /PIN is incorrect/i.test(err.message)) throw new Error(t('error.pinIncorrect'));
     if (!(err instanceof ApiError) || !err.offline) throw err;
     const cached = await secure.get(pinKey(staffId));
     if (!cached) throw new Error(t('error.offlineUnknownStaff'));

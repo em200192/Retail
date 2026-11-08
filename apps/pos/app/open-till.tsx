@@ -1,6 +1,6 @@
 import { formatGBP } from '@retail/shared';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { errorMessage } from '../src/api';
 import { fmtDateTime, t, useLang } from '../src/i18n';
@@ -15,10 +15,14 @@ export default function OpenTill() {
   const tillName = useApp((s) => s.hello?.till?.name ?? null);
   const online = useApp((s) => s.online);
   const [typed, setTyped] = useState('15000');
+  // The suggested float (or a quick-pick) is replaced by the first digit typed, not appended to.
+  const [fresh, setFresh] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pence = Number(typed || '0');
   const allowed = can(staff, 'pos.open_till');
+  // Someone who cannot sell (e.g. the stock role) gets the staff tools instead ("we need this", stock check).
+  useEffect(() => { if (staff && staff.permissions.length > 0 && !can(staff, 'pos.sell')) router.replace('/staff'); }, [staff]);
 
   const submit = async () => {
     setBusy(true);
@@ -51,11 +55,11 @@ export default function OpenTill() {
             <Money pence={formatGBP(pence)} size={56} />
             <Row wrap>
               {[5000, 10000, 15000, 20000].map((v) => (
-                <Button key={v} kind="secondary" label={formatGBP(v)} onPress={() => setTyped(String(v))} selected={pence === v} />
+                <Button key={v} kind="secondary" label={formatGBP(v)} onPress={() => { setTyped(String(v)); setFresh(true); }} selected={pence === v} />
               ))}
             </Row>
           </View>
-          <Keypad onKey={(k) => setTyped((t) => applyAmountKey(t, k))} keys={['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', '⌫']} size={68} testIDPrefix="float" />
+          <Keypad onKey={(k) => { setTyped((t) => applyAmountKey(fresh && k !== '⌫' ? '' : t, k, 7)); setFresh(false); }} keys={['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', '⌫']} size={68} testIDPrefix="float" />
         </Row>
         <Row wrap>
           <Button testID="open-till" label={busy ? t('openTill.opening') : t('openTill.submit', { amount: formatGBP(pence) })} size="xl" disabled={!allowed || busy || !online || !tillName}

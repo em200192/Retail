@@ -2,7 +2,7 @@ import { formatGBP } from '@retail/shared';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { fmtDateTime, t, tn, useLang } from '../src/i18n';
+import { fmtDateTime, ltr, t, tn, useLang } from '../src/i18n';
 import { can } from '../src/logic/permissions';
 import type { QueueItem } from '../src/logic/queue';
 import { queue, syncNow, toast, useApp } from '../src/state/store';
@@ -73,7 +73,7 @@ export default function SyncStatus() {
         <Card key={i.id} style={{ gap: space.sm, borderColor: '#EDB9B9' }}>
           <Row style={{ justifyContent: 'space-between' }} wrap>
             <Row><Badge label={t('sync.rejected')} tone="danger" symbol="!" /><T v="label">{itemTitle(i)}</T></Row>
-            <T v="small" muted>{fmtDateTime(i.createdAt)} · {formatGBP(Number((i.payload as { total_pence?: number }).total_pence ?? 0))}</T>
+            <T v="small" muted>{fmtDateTime(i.createdAt)} · {ltr(formatGBP(Number((i.payload as { total_pence?: number }).total_pence ?? 0)))}</T>
           </Row>
           <T tone={color.danger}>{i.message}</T>
           {Array.isArray(i.details) ? (i.details as { path?: string; message?: string }[]).slice(0, 4).map((d, n) => (

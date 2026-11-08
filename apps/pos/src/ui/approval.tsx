@@ -57,6 +57,7 @@ export function ApprovalSheet({ request, onCancel, onApproved }: {
         }, { timeoutMs: 6000 });
         onApproved({ approverId: approver.id, approverName: approver.display_name, pin, verified: 'online' });
       } catch (e) {
+        if (e instanceof ApiError && /PIN is incorrect/i.test(e.message)) throw new Error(t('error.pinIncorrect'));
         if (!(e instanceof ApiError && e.offline)) throw e;
         // Offline: check against this till's cached PIN verifier if the manager has logged in here before.
         const ok = await checkPinOffline(approver.id, pin);
@@ -76,7 +77,18 @@ export function ApprovalSheet({ request, onCancel, onApproved }: {
   };
 
   return (
-    <Sheet visible title={request.title} onClose={onCancel} width={640} testID="approval-sheet">
+    <Sheet visible title={request.title} onClose={onCancel} width={640} testID="approval-sheet"
+      // Pinned under the scrolling content, so Approve is always on screen (phones).
+      footer={(
+        <>
+          {offlineNote ? <Banner tone="accent" text={offlineNote} /> : null}
+          {error ? <Banner tone="danger" text={error} /> : null}
+          <Row>
+            <Button kind="secondary" label={t('common.cancel')} onPress={onCancel} style={{ flex: 1 }} />
+            <Button testID="approve-confirm" label={busy ? t('common.checking') : t('approval.approve')} disabled={!approver || pin.length < 4 || busy} onPress={confirm} style={{ flex: 2 }} />
+          </Row>
+        </>
+      )}>
       <Banner tone="warning" symbol="!" text={request.description} />
       <T v="label">{t('approval.choose')}</T>
       <Row wrap gap={space.sm}>
@@ -103,12 +115,6 @@ export function ApprovalSheet({ request, onCancel, onApproved }: {
           <Keypad testIDPrefix="approve" size={64} onKey={(k) => setPin((p) => (k === 'C' ? '' : k === '⌫' ? p.slice(0, -1) : p.length >= 8 ? p : p + k))} />
         </View>
       ) : null}
-      {offlineNote ? <Banner tone="accent" text={offlineNote} /> : null}
-      {error ? <Banner tone="danger" text={error} /> : null}
-      <Row>
-        <Button kind="secondary" label={t('common.cancel')} onPress={onCancel} style={{ flex: 1 }} />
-        <Button testID="approve-confirm" label={busy ? t('common.checking') : t('approval.approve')} disabled={!approver || pin.length < 4 || busy} onPress={confirm} style={{ flex: 2 }} />
-      </Row>
     </Sheet>
   );
 }

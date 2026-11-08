@@ -348,6 +348,7 @@ export const en = {
   'menu.cashDropCta': 'Record cash drop',
   'menu.payOutCta': 'Pay out',
   'menu.paidOutWhy': 'Say what the money was for',
+  'menu.overLimit': 'This is over {name}’s limit. A manager must approve it.',
   'menu.expenseCategory': 'Expense category',
   'menu.whatFor': 'What was it for?',
   'menu.whatForPlaceholder': 'e.g. Window cleaner',

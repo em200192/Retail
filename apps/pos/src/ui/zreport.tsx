@@ -18,6 +18,9 @@ export interface ZReport {
   expected_cash_pence: number;
 }
 
+/** −£1.20 for a deduction, but plain £0.00 when there is none. */
+const minus = (pence: number) => (pence > 0 ? `−${formatGBP(pence)}` : formatGBP(pence));
+
 const MOVES: Record<string, MessageKey> = {
   no_sale: 'z.move.no_sale', paid_in: 'z.move.paid_in', paid_out: 'z.move.paid_out', cash_drop: 'z.move.cash_drop', float_adjust: 'z.move.float_adjust',
 };
@@ -37,12 +40,12 @@ export function ZReportView({ z }: { z: ZReport }) {
   return (
     <View style={{ gap: 6 }} testID="z-report">
       <Line l={t('z.sales', { count: z.sales.count })} r={formatGBP(z.sales.gross_pence)} />
-      <Line l={t('z.discounts')} r={`−${formatGBP(z.sales.discounts_pence)}`} />
+      <Line l={t('z.discounts')} r={minus(z.sales.discounts_pence)} />
       <Line l={t('z.net')} r={formatGBP(z.sales.net_pence)} strong />
       <Line l={t('z.ofWhichVat')} r={formatGBP(z.sales.vat_pence)} />
       <Divider />
       {Object.entries(z.payments).map(([m, v]) => <Line key={m} l={m === 'cash' ? t('z.cashTaken') : m === 'card' ? t('z.cardTaken') : m} r={formatGBP(v)} />)}
-      <Line l={t('z.refunds', { count: z.refunds.count })} r={`−${formatGBP(z.refunds.total_pence)}`} />
+      <Line l={t('z.refunds', { count: z.refunds.count })} r={minus(z.refunds.total_pence)} />
       <Line l={t('z.voided', { sales: z.voided_sales.count, lines: z.voided_lines.count })} r={formatGBP(z.voided_sales.value_pence + z.voided_lines.value_pence)} />
       {Object.entries(z.cash_movements).map(([k, v]) => <Line key={k} l={t('z.movement', { label: MOVES[k] ? t(MOVES[k]) : k, count: v.count })} r={formatGBP(v.amount_pence)} />)}
       <Divider />

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { errorMessage } from '../src/api';
 import { roleLabel, t, textDir, tn, useLang } from '../src/i18n';
 import { getState, login, logout, refreshHello, staffTiles, useApp } from '../src/state/store';
@@ -20,6 +20,9 @@ export default function Login() {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  // Phone: the PIN pad sits under the staff tiles, so bring it into view once a name is chosen.
+  const stacked = useWindowDimensions().width < 700;
 
   useEffect(() => { void refreshHello().catch(() => {}); }, []);
   useEffect(() => { if (lockedStaff) setStaffId(lockedStaff.id); }, [lockedStaff?.id]);
@@ -61,7 +64,7 @@ export default function Login() {
   const chosen = tiles.find((t) => t.id === staffId);
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1, padding: space.xl, alignItems: 'center', justifyContent: 'center' }}>
+    <ScrollView ref={scrollRef} contentContainerStyle={{ flexGrow: 1, padding: space.xl, alignItems: 'center', justifyContent: 'center' }}>
       <View style={{ width: '100%', maxWidth: 1100, alignItems: 'flex-end', marginBottom: space.lg }}>
         <LanguageSwitch />
       </View>
@@ -79,7 +82,7 @@ export default function Login() {
               return (
                 <Pressable key={tile.id} testID={`staff-${tile.display_name}`} accessibilityRole="radio" accessibilityState={{ checked: on }}
                   accessibilityLabel={`${tile.display_name}${t('common.listSep')}${roleLabel(tile.role_key)}`}
-                  onPress={() => { setStaffId(tile.id); setPin(''); setError(null); }}
+                  onPress={() => { setStaffId(tile.id); setPin(''); setError(null); if (stacked) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50); }}
                   style={({ pressed }) => [{
                     width: 150, padding: space.lg, borderRadius: radius.md, backgroundColor: on ? color.primary : color.card,
                     borderWidth: 2, borderColor: on ? color.primary : color.border, gap: space.sm, alignItems: 'center',

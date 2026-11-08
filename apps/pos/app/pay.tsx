@@ -91,7 +91,7 @@ export default function Pay() {
       <View style={{ flexDirection: wide ? 'row' : 'column', gap: space.lg }}>
         <Card style={{ flex: wide ? 1 : undefined, gap: space.md, padding: space.xl }}>
           <T v="caption" muted>{payments.length ? t('pay.leftToPay') : t('pay.toPay')}</T>
-          <Money pence={formatGBP(Math.max(remaining, 0))} size={72} />
+          <Money pence={formatGBP(Math.max(remaining, 0))} size={width < 520 ? 52 : 72} />
           <T muted>{tn('pay.summary', totals.items, { total: formatGBP(totals.total), vat: formatGBP(totals.vat) })}</T>
           {payments.length ? (
             <View style={{ gap: 6, marginTop: space.sm }}>

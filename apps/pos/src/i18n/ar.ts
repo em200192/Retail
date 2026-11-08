@@ -360,6 +360,7 @@ export const ar: Dictionary = {
   'menu.cashDropCta': 'تسجيل نقل النقد',
   'menu.payOutCta': 'صرف المبلغ',
   'menu.paidOutWhy': 'اذكر سبب صرف المبلغ',
+  'menu.overLimit': 'هذا يتجاوز الحد المسموح لـ {name}. يجب أن يوافق المدير.',
   'menu.expenseCategory': 'فئة المصروف',
   'menu.whatFor': 'لأي غرض؟',
   'menu.whatForPlaceholder': 'مثال: تنظيف النوافذ',

@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { ApiError, errorMessage } from '../src/api';
-import { fmtDateTime, isRTL, type MessageKey, t, useLang } from '../src/i18n';
+import { fmtDateTime, isRTL, ltr, type MessageKey, t, useLang } from '../src/i18n';
 import { can, limitDecision } from '../src/logic/permissions';
 import { buildRefundPayload, refundableLines, refundAmount, type RefundableLine, type SaleDetail } from '../src/logic/refund';
 import { api, getState, queueRefund, recentSale, toast, useApp } from '../src/state/store';
@@ -102,7 +102,7 @@ export default function Refund() {
           <Row style={{ justifyContent: 'space-between' }} wrap>
             <T v="h2">{sale.receipt_number}</T>
             <Row>
-              <T muted>{sale.completed_at ? fmtDateTime(sale.completed_at) : ''} · {formatGBP(sale.total_pence)}</T>
+              <T muted>{sale.completed_at ? fmtDateTime(sale.completed_at) : ''} · {ltr(formatGBP(sale.total_pence))}</T>
               {source === 'local' ? <Badge label={t('refund.local')} tone="accent" symbol="○" /> : null}
             </Row>
           </Row>

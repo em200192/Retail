@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { contextOf, type Deps, requirePosToken } from '../app.ts';
-import { loadActor, requirePermission } from '../lib/authz.ts';
+import { loadActor, requirePermission, requireAnyPermission } from '../lib/authz.ts';
 import { forbidden } from '../lib/errors.ts';
 import { isoDateTime, parse } from '../lib/validate.ts';
 import { type DeviceContext, ingestRefund, ingestSale, refundSchema, saleSchema, type SyncOutcome, toOutcome } from '../services/sync.ts';
@@ -66,7 +66,8 @@ export async function syncRoutes(app: FastifyInstance, deps: Deps) {
     const ctx = contextOf(req);
     return deps.db.withTenant(ctx, async (tx) => {
       const actor = await loadActor(tx, pos.sid);
-      requirePermission(actor, 'pos.sell');
+      // Stock staff use the till for checks and "we need" requests, so they need the catalogue too.
+      requireAnyPermission(actor, 'pos.sell', 'stock.view', 'purchasing.request');
       const since = q.since ? new Date(q.since) : null;
       const serverTime = new Date().toISOString();
       const [branch] = await tx`

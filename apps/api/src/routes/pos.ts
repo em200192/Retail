@@ -10,6 +10,9 @@ import { postMovements } from '../lib/stock.ts';
 import { idParam, isoDate, parse, pence, uuid } from '../lib/validate.ts';
 import { computeZReport } from '../services/zreport.ts';
 
+/** A till float above this is almost certainly a typing mistake. */
+const MAX_FLOAT_PENCE = 500_000;
+
 const approval = z.object({ approver_staff_id: uuid, approver_pin: z.string().regex(/^\d{4,8}$/) }).nullish();
 
 export async function posRoutes(app: FastifyInstance, deps: Deps) {
@@ -44,7 +47,8 @@ export async function posRoutes(app: FastifyInstance, deps: Deps) {
 
   // Open a till (start of shift). The device may supply the id (offline-safe).
   app.post('/v1/till-sessions', async (req, reply) => {
-    const body = parse(z.object({ id: uuid.optional(), till_id: uuid, opening_float_pence: pence.default(0) }), req.body);
+    const body = parse(z.object({ id: uuid.optional(), till_id: uuid,
+      opening_float_pence: pence.max(MAX_FLOAT_PENCE, 'The opening float must be £5,000 or less').default(0) }), req.body);
     const out = await tenantTx(deps, req, async ({ tx, actor, tenantId }) => {
       requirePermission(actor, 'pos.open_till');
       const [till] = await tx<{ branch_id: string; is_active: boolean }[]>`SELECT branch_id, is_active FROM tills WHERE id = ${body.till_id}`;
@@ -192,7 +196,8 @@ export async function posRoutes(app: FastifyInstance, deps: Deps) {
     }), req.query);
     return tenantTx(deps, req, async ({ tx, actor }) => {
       requireBranchAccess(actor, q.branch_id);
-      const own = !can(actor, 'reports.sales');
+      // Staff who can refund may look up anyone's receipt by its number; otherwise cashiers see their own sales.
+      const own = !can(actor, 'reports.sales') && !(q.receipt_number && can(actor, 'pos.refund'));
       if (own) requirePermission(actor, 'pos.sell');
       return tx`
         SELECT id, receipt_number, status, channel, staff_id, customer_id, total_pence, vat_pence, discount_pence, item_count,

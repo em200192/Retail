@@ -1,6 +1,6 @@
 import { formatGBP } from '@retail/shared';
 import { router } from 'expo-router';
-import { Platform, ScrollView, View } from 'react-native';
+import { Platform, ScrollView, useWindowDimensions, View } from 'react-native';
 import { LANGUAGES, t, useLang, useReceiptLang } from '../src/i18n';
 import { useApp } from '../src/state/store';
 import { Badge, Button, Card, Money, T } from '../src/ui/components';
@@ -13,6 +13,7 @@ export default function ReceiptScreen() {
   const receipt = useApp((s) => s.lastReceipt);
   const synced = useApp((s) => s.queue.pending === 0 && s.queue.rejected === 0);
   const online = useApp((s) => s.online);
+  const narrow = useWindowDimensions().width < 520;
   if (!receipt) {
     return <View style={{ padding: space.xl }}><T>{t('receipt.none')}</T><Button label={t('receipt.backToTill')} onPress={() => router.replace('/sell')} /></View>;
   }
@@ -25,7 +26,7 @@ export default function ReceiptScreen() {
           {change > 0 ? (
             <>
               <T v="caption" tone="#6B4A00">{t('receipt.giveChange')}</T>
-              <Money pence={formatGBP(change)} size={96} />
+              <Money pence={formatGBP(change)} size={narrow ? 64 : 96} />
               <T v="h3">{t('receipt.changeDue')}</T>
             </>
           ) : (
