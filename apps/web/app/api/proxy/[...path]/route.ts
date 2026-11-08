@@ -12,12 +12,17 @@ async function forward(req: NextRequest, { params }: { params: Promise<{ path: s
   if (!token) return NextResponse.json({ error: 'unauthorized', message: 'Please sign in' }, { status: 401 });
   const url = `${API_URL}/${path.map(encodeURIComponent).join('/')}${req.nextUrl.search}`;
   const hasBody = !['GET', 'HEAD'].includes(req.method);
-  const res = await fetch(url, {
-    method: req.method,
-    headers: { authorization: `Bearer ${token}`, ...(hasBody ? { 'content-type': 'application/json' } : {}) },
-    body: hasBody ? await req.text() : undefined,
-    cache: 'no-store',
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: req.method,
+      headers: { authorization: `Bearer ${token}`, ...(hasBody ? { 'content-type': 'application/json' } : {}) },
+      body: hasBody ? await req.text() : undefined,
+      cache: 'no-store',
+    });
+  } catch {
+    return NextResponse.json({ error: 'unavailable', message: 'Counter cannot reach the server right now. Try again in a minute.' }, { status: 503 });
+  }
   const out = new NextResponse(res.status === 204 ? null : await res.text(), { status: res.status });
   out.headers.set('content-type', res.headers.get('content-type') ?? 'application/json');
   if (res.status === 401) out.cookies.delete(SESSION_COOKIE);

@@ -47,7 +47,7 @@ export default function ReportsPage() {
               <Card key={l} className="p-5"><p className="text-sm text-muted">{l}</p><p className="mt-1 text-2xl font-semibold tabular">{v}</p></Card>
             ))}
           </div>
-          <Card><CardHeader title={t("Daily takings")} /><div className="px-5 pb-4">{daily.isLoading ? <LoadingRows /> : <DailyColumns data={series} label={t("Daily takings including VAT")} />}</div></Card>
+          <Card><CardHeader title={t("Daily takings")} /><div className="px-5 pb-4">{/* Wait for data: the page is prerendered at build time, so date labels must not render before then. */}{daily.isLoading || !daily.data ? <LoadingRows /> : <DailyColumns data={series} label={t("Daily takings including VAT")} />}</div></Card>
           <Card>
             <Table>
               <thead><tr><Th>{t("Date")}</Th><Th align="right">{t("Transactions")}</Th><Th align="right">{t("Avg basket")}</Th><Th align="right">{t("Takings")}</Th><Th align="right">VAT</Th>

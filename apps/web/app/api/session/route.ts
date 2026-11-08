@@ -5,9 +5,14 @@ import { API_URL, cookieOptions, SESSION_COOKIE } from '@/lib/server';
 export async function POST(req: Request) {
   const { action, ...body } = await req.json();
   const path = action === 'signup' ? '/v1/auth/signup' : '/v1/auth/login';
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store',
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store',
+    });
+  } catch {
+    return NextResponse.json({ error: 'unavailable', message: 'Counter cannot reach the server right now. Try again in a minute.' }, { status: 503 });
+  }
   const data = await res.json().catch(() => ({ message: 'The server could not be reached' }));
   if (!res.ok) return NextResponse.json(data, { status: res.status });
   if (data.requires_tenant_selection) return NextResponse.json(data);

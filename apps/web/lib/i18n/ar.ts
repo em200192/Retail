@@ -775,5 +775,7 @@ export const AR: Record<string, string> = {
   "The reading came back incomplete. Upload again, or try one page at a time.": "جاءت القراءة ناقصة. ارفعها مرة أخرى، أو جرّب صفحة واحدة في كل مرة.",
   "Claude couldn’t read the invoice just now. Upload it again in a moment.": "لم يستطع Claude قراءة الفاتورة الآن. ارفعها مرة أخرى بعد لحظة.",
   "We couldn’t read this invoice. Upload it again, or try a clearer photo.": "لم نستطع قراءة هذه الفاتورة. ارفعها مرة أخرى أو جرّب صورة أوضح.",
-  "Duplicate invoice: this supplier invoice number has already been uploaded": "فاتورة مكررة: رقم فاتورة هذا المورد مرفوع من قبل"
+  "Duplicate invoice: this supplier invoice number has already been uploaded": "فاتورة مكررة: رقم فاتورة هذا المورد مرفوع من قبل",
+  "Counter cannot reach the server right now. Try again in a minute.": "لا يستطيع Counter الوصول إلى الخادم الآن. حاول مرة أخرى بعد دقيقة.",
+  "Something went wrong": "حدث خطأ ما"
 };

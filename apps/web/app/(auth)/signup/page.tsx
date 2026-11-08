@@ -47,7 +47,7 @@ export default function SignupPage() {
       branch: { name: f.branch_name, code: f.branch_code.toUpperCase(), address_line1: f.address_line1 || undefined, city: f.city || undefined,
         postcode: f.postcode ? f.postcode.toUpperCase() : undefined },
     }) });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({ message: t('Counter cannot reach the server right now. Try again in a minute.') }));
     setBusy(false);
     if (!res.ok) return setError(data.message ?? t('Could not create your account'));
     router.replace('/?welcome=1');

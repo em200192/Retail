@@ -1,6 +1,7 @@
 'use client';
 import useSWR, { type SWRConfiguration } from 'swr';
 import { hardNavigate } from './nav';
+import { t } from './i18n';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public details?: any) { super(message); }
@@ -18,8 +19,12 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
     hardNavigate(`/login?next=${encodeURIComponent(window.location.pathname)}`);
   }
   const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
-  if (!res.ok) throw new ApiError(res.status, friendly(data), data?.details);
+  let data: any;
+  try { data = text ? JSON.parse(text) : undefined; } catch {
+    // Not JSON (e.g. an HTML error page from a proxy): never crash the screen on it.
+    throw new ApiError(res.ok ? 502 : res.status, t('Counter cannot reach the server right now. Try again in a minute.'));
+  }
+  if (!res.ok) throw new ApiError(res.status, t(friendly(data)), data?.details);
   return data as T;
 }
 
