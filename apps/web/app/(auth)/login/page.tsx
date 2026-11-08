@@ -17,12 +17,14 @@ function LoginForm() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError(t('Enter your email address, like name@example.com'));
+    if (!password) return setError(t('Enter your password'));
     setBusy(true); setError(null);
     const res = await fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'login', email, password, tenant_id: tenantId || undefined }) });
+      body: JSON.stringify({ action: 'login', email: email.trim(), password, tenant_id: tenantId || undefined }) });
     const data = await res.json().catch(() => ({ message: t('Counter cannot reach the server right now. Try again in a minute.') }));
     setBusy(false);
-    if (!res.ok) return setError(data.message ?? t('Could not sign you in'));
+    if (!res.ok) return setError(data.message ? t(data.message) : t('Could not sign you in'));
     if (data.requires_tenant_selection) { setTenants(data.tenants); setTenantId(data.tenants[0].tenant_id); return; }
     router.replace(next.startsWith('/') ? next : '/');
   };

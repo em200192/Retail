@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const branches = useApi<any[]>('/v1/branches');
   const devices = useApi<any[]>('/v1/devices');
   const [addBranch, setAddBranch] = useState(false);
+  const [editBranch, setEditBranch] = useState<any | null>(null);
   const [addDevice, setAddDevice] = useState(false);
   const [pairing, setPairing] = useState<{ code: string; name: string } | null>(null);
   const branchName = new Map((branches.data ?? []).map((b) => [b.id, b.name]));
@@ -25,7 +26,7 @@ export default function SettingsPage() {
   return (
     <>
       <PageHeader title={t("Settings")} description={t("Your business, shops and the devices that connect to them.")} />
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card className="h-fit">
           <CardHeader title={t("Business")} />
           <dl className="space-y-3 px-5 pb-5 text-sm">
@@ -41,11 +42,12 @@ export default function SettingsPage() {
           <CardHeader title={t("Shops")} action={<Button size="sm" variant="secondary" icon={<Plus className="size-4" />} onClick={() => setAddBranch(true)}>{t("Add shop")}</Button>} />
           {branches.isLoading ? <LoadingRows rows={2} /> : (
             <Table>
-              <thead><tr><Th>{t("Shop")}</Th><Th>{t("Code")}</Th><Th>{t("Address")}</Th><Th>{t("Status")}</Th></tr></thead>
+              <thead><tr><Th>{t("Shop")}</Th><Th>{t("Code")}</Th><Th>{t("Address")}</Th><Th>{t("Status")}</Th><Th><span className="sr-only">{t("Actions")}</span></Th></tr></thead>
               <tbody>{(branches.data ?? []).map((b) => (
                 <tr key={b.id}><Td className="font-medium">{b.name}</Td><Td className="font-mono text-xs">{b.code}</Td>
                   <Td className="text-muted">{[b.address_line1, b.city, b.postcode].filter(Boolean).join(', ') || '—'}</Td>
-                  <Td><Badge tone={b.is_active ? 'success' : 'neutral'}>{b.is_active ? t('Open') : t('Closed')}</Badge></Td></tr>
+                  <Td><Badge tone={b.is_active ? 'success' : 'neutral'}>{b.is_active ? t('Open') : t('Closed')}</Badge></Td>
+                  <Td align="right"><Button size="sm" variant="ghost" onClick={() => setEditBranch(b)}>{t('Edit')}</Button></Td></tr>
               ))}</tbody>
             </Table>
           )}
@@ -68,8 +70,11 @@ export default function SettingsPage() {
                 <Td className="text-muted">{d.last_sync_at ? formatDateTimeUK(d.last_sync_at) : t('Never')}</Td>
                 <Td><Badge tone={d.is_active ? 'success' : 'neutral'}>{d.is_active ? t('Active') : t('Deactivated')}</Badge></Td>
                 <Td align="right"><Button size="sm" variant="ghost" onClick={async () => {
-                  await api(`/v1/devices/${d.id}`, { method: 'PATCH', body: { is_active: !d.is_active } }); devices.mutate();
-                  toast(d.is_active ? t('{name} deactivated — it can no longer sync', { name: d.name }) : t('{name} reactivated', { name: d.name }));
+                  try {
+                    await api(`/v1/devices/${d.id}`, { method: 'PATCH', body: { is_active: !d.is_active } });
+                    toast(d.is_active ? t('{name} deactivated — it can no longer sync', { name: d.name }) : t('{name} reactivated', { name: d.name }));
+                  } catch (e) { toast((e as Error).message, 'danger'); }
+                  devices.mutate();
                 }}>{d.is_active ? t('Deactivate') : t('Reactivate')}</Button></Td>
               </tr>
             ))}</tbody>
@@ -78,24 +83,41 @@ export default function SettingsPage() {
       </Card>
 
       {addBranch && <BranchModal onClose={() => setAddBranch(false)} onDone={() => { branches.mutate(); reload(); toast(t('Shop added')); }} />}
+      {editBranch && <BranchModal branch={editBranch} onClose={() => setEditBranch(null)} onDone={() => { branches.mutate(); reload(); toast(t('Changes saved')); }} />}
       {addDevice && <DeviceModal branches={branches.data ?? []} onClose={() => setAddDevice(false)} onDone={(code, name) => { devices.mutate(); setPairing({ code, name }); }} />}
       {pairing && <PairingModal {...pairing} onClose={() => setPairing(null)} />}
     </>
   );
 }
 
-function BranchModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ name: '', code: '', address_line1: '', city: '', postcode: '', phone: '' });
+const UK_POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}$/i;
+
+/** Adds a shop, or edits one when `branch` is given. */
+function BranchModal({ onClose, onDone, branch }: { onClose: () => void; onDone: () => void; branch?: any }) {
+  const [f, setF] = useState({ name: branch?.name ?? '', code: branch?.code ?? '', address_line1: branch?.address_line1 ?? '', city: branch?.city ?? '',
+    postcode: branch?.postcode ?? '', phone: branch?.phone ?? '' });
   const [err, setErr] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  const submit = async () => {
+    if (!f.name.trim()) return setErr(t('Enter a name for your shop'));
+    if (!/^[A-Za-z0-9]{2,8}$/.test(f.code)) return setErr(t('Use 2 to 8 letters or numbers, like MAN1'));
+    if (f.postcode && !UK_POSTCODE.test(f.postcode.trim())) return setErr(t('Enter a real UK postcode, like M14 6LE'));
+    const body = { name: f.name.trim(), code: f.code.toUpperCase(), address_line1: f.address_line1 || null, city: f.city || null,
+      postcode: f.postcode ? f.postcode.trim().toUpperCase() : null, phone: f.phone || null };
+    try {
+      // The code is part of every receipt number, so it can't change once the shop exists.
+      if (branch) await api(`/v1/branches/${branch.id}`, { method: 'PATCH', body: { ...body, code: undefined } });
+      else await api('/v1/branches', { body });
+      onDone(); onClose();
+    } catch (e) { setErr((e as Error).message); }
+  };
   return (
-    <Modal open onClose={onClose} title={t("Add a shop")} footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button onClick={async () => {
-      try { await api('/v1/branches', { body: { ...f, code: f.code.toUpperCase(), postcode: f.postcode.toUpperCase() || null } }); onDone(); onClose(); } catch (e) { setErr((e as Error).message); }
-    }}>{t("Add shop")}</Button></>}>
+    <Modal open onClose={onClose} title={branch ? t('Edit {name}', { name: branch.name }) : t("Add a shop")}
+      footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button onClick={submit}>{branch ? t('Save changes') : t("Add shop")}</Button></>}>
       {err && <p role="alert" className="text-sm font-medium text-danger">{err}</p>}
       <div className="grid grid-cols-[1fr_8rem] gap-3">
         <Field label={t("Shop name")} htmlFor="bn"><Input id="bn" value={f.name} onChange={set('name')} /></Field>
-        <Field label={t("Short code")} htmlFor="bc" hint={t("2–8 characters")}><Input id="bc" value={f.code} maxLength={8} onChange={set('code')} /></Field>
+        <Field label={t("Short code")} htmlFor="bc" hint={t("2–8 characters")}><Input id="bc" value={f.code} maxLength={8} onChange={set('code')} disabled={!!branch} /></Field>
       </div>
       <Field label={t("Address line 1")} htmlFor="ba"><Input id="ba" value={f.address_line1} onChange={set('address_line1')} /></Field>
       <div className="grid grid-cols-2 gap-3">
@@ -140,7 +162,7 @@ function PairingModal({ code, name, onClose }: { code: string; name: string; onC
     <Modal open onClose={onClose} title={t('Pair {name}', { name })} description={t("Open the Counter till app and scan this code, or paste the pairing code. It is shown only once.")}
       footer={<Button onClick={onClose}>{t("Done")}</Button>}>
       <div className="flex flex-col items-center gap-4">
-        {qr ? <img src={qr} alt="Pairing QR code for the till app" className="size-60 rounded-lg border border-line" /> : <div className="skeleton size-60" />}
+        {qr ? <img src={qr} alt={t("Pairing QR code for the till app")} className="size-60 rounded-lg border border-line" /> : <div className="skeleton size-60" />}
         <div className="w-full">
           <label htmlFor="pc" className="mb-1.5 block text-sm font-medium">{t("Pairing code")}</label>
           <div className="flex gap-2">

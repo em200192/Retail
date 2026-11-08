@@ -27,7 +27,7 @@ export default function TillsPage() {
           {openNow.map((s) => (
             <Card key={s.id} className="p-5">
               <div className="flex items-center justify-between"><p className="font-semibold">{s.till_name}</p><Badge tone="success"><span className="size-1.5 rounded-full bg-success" aria-hidden />{t("Open")}</Badge></div>
-              <p className="mt-1 text-sm text-muted">Opened by {s.opened_by_name} · {formatDateTimeUK(s.opened_at)}</p>
+              <p className="mt-1 text-sm text-muted">{t('Opened by {name} · {when}', { name: s.opened_by_name, when: formatDateTimeUK(s.opened_at) })}</p>
               <p className="mt-1 text-sm text-muted">{t("Float")}{" "}<Money pence={s.opening_float_pence} /></p>
               <button className="mt-3 text-sm font-medium text-brand hover:underline" onClick={() => setOpenId(s.id)}>{t("View X-read (so far)")}</button>
             </Card>
@@ -69,7 +69,7 @@ function Row({ label, value, strong }: { label: string; value: React.ReactNode; 
 
 function ZReport({ z, session }: { z: any; session: any }) {
   return (
-    <div className="grid gap-6 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
       <section>
         <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-subtle">{t("Sales")}</h3>
         <Row label={t("Transactions")} value={z.sales.count} />

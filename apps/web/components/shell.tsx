@@ -77,7 +77,7 @@ function Brand() {
 }
 
 export function Shell({ children }: { children: React.ReactNode }) {
-  const { me, branchId, setBranchId } = useMe();
+  const { me, branchId, setBranchId, error } = useMe();
   const [open, setOpen] = useState(false);
   const signOut = async () => { await fetch('/api/session', { method: 'DELETE' }); hardNavigate('/login'); };
   return (
@@ -133,7 +133,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <button onClick={signOut} className="rounded-lg p-2 text-muted hover:bg-surface hover:text-ink" aria-label={t("Sign out")} title={t("Sign out")}><LogOut className="size-5" /></button>
         </div>
       </header>
-      <main id="main" className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+      <main id="main" className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        {!!error && !me && <div role="alert" className="mb-6 rounded-xl border border-danger/30 bg-danger-tint p-4 text-sm text-danger">{(error as Error).message}</div>}
+        {children}
+      </main>
     </div>
   );
 }

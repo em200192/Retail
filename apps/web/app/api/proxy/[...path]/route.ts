@@ -11,13 +11,15 @@ async function forward(req: NextRequest, { params }: { params: Promise<{ path: s
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return NextResponse.json({ error: 'unauthorized', message: 'Please sign in' }, { status: 401 });
   const url = `${API_URL}/${path.map(encodeURIComponent).join('/')}${req.nextUrl.search}`;
-  const hasBody = !['GET', 'HEAD'].includes(req.method);
+  // Only send a body (and its content-type) when there is one: the API rejects an empty JSON body (e.g. DELETE).
+  const body = ['GET', 'HEAD'].includes(req.method) ? '' : await req.text();
+  const hasBody = body.length > 0;
   let res: Response;
   try {
     res = await fetch(url, {
       method: req.method,
       headers: { authorization: `Bearer ${token}`, ...(hasBody ? { 'content-type': 'application/json' } : {}) },
-      body: hasBody ? await req.text() : undefined,
+      body: hasBody ? body : undefined,
       cache: 'no-store',
     });
   } catch {

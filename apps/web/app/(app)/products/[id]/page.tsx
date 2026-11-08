@@ -27,6 +27,7 @@ export default function ProductPage() {
   const levels = useApi<any[]>('/v1/price-levels');
   const [f, setF] = useState<any>(empty);
   const [price, setPrice] = useState<number | null>(null);
+  const [priceText, setPriceText] = useState('');
   const [barcode, setBarcode] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -51,6 +52,7 @@ export default function ProductPage() {
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!f.name.trim()) return setErr(t('Enter a product name'));
+    if (isNew && priceText.trim() && price === null) return setErr(t('Enter a price in pounds and pence, like 1.25'));
     setBusy(true); setErr(null);
     const body: any = {
       name: f.name.trim(), brand: f.brand || null, size_text: f.size_text || null, category_id: f.category_id || null, vat_code: f.vat_code,
@@ -84,7 +86,7 @@ export default function ProductPage() {
       <PageHeader title={isNew ? t('Add a product') : p?.name ?? t('Product')}
         description={isNew ? t('Scan or type the barcode. VAT and age checks come from the category when you pick one.') : p?.archived_at ? t('This product is archived.') : undefined} />
       <ErrorNote error={product.error} />
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <form onSubmit={save} className="xl:col-span-2">
           <Card>
             <CardHeader title={t("Details")} />
@@ -115,7 +117,7 @@ export default function ProductPage() {
                   <Field label={t("Barcode")} htmlFor="barcode" hint={t("Scan it with a barcode scanner, or type the digits.")}>
                     <Input id="barcode" inputMode="numeric" value={barcode} onChange={(e) => setBarcode(e.target.value.trim())} className="font-mono" />
                   </Field>
-                  {can('prices.edit') && <Field label={t("Shelf price (incl. VAT)")} htmlFor="price"><MoneyInput id="price" value={price} onChange={setPrice} /></Field>}
+                  {can('prices.edit') && <Field label={t("Shelf price (incl. VAT)")} htmlFor="price"><MoneyInput id="price" value={price} onChange={setPrice} onInput={(e) => setPriceText(e.currentTarget.value)} /></Field>}
                 </>
               )}
             </div>
@@ -176,7 +178,11 @@ export default function ProductPage() {
                       {b.units_per_scan > 1 && <Badge>{t('Case of {n}', { n: b.units_per_scan })}</Badge>}
                       {b.barcode_type === 'PLU' && <Badge>{t("Scale PLU")}</Badge>}
                       {editable && <button className="rounded p-1 text-subtle hover:bg-danger-tint hover:text-danger" aria-label={t('Remove barcode {code}', { code: b.barcode })}
-                        onClick={async () => { await api(`/v1/products/${id}/barcodes/${b.id}`, { method: 'DELETE' }); product.mutate(); }}><Trash2 className="size-4" /></button>}
+                        onClick={async () => {
+                          try { await api(`/v1/products/${id}/barcodes/${b.id}`, { method: 'DELETE' }); toast(t('Barcode removed')); }
+                          catch (e) { toast((e as Error).message, 'danger'); }
+                          product.mutate();
+                        }}><Trash2 className="size-4" /></button>}
                     </span>
                   </li>
                 ))}
@@ -188,7 +194,7 @@ export default function ProductPage() {
                 <ul className="divide-y divide-line/70 px-5 pb-3">
                   {p.stock.map((s: any) => (
                     <li key={s.branch_id} className="flex justify-between py-2.5 text-sm"><span>{branchName.get(s.branch_id)}</span>
-                      <span className="tabular"><span className="font-semibold">{s.available}</span> available{s.reserved > 0 && <span className="text-subtle"> · {s.reserved} held for orders</span>}</span></li>
+                      <span className="tabular"><span className="font-semibold">{t('{n} available', { n: s.available })}</span>{s.reserved > 0 && <span className="text-subtle"> · {t('{n} held for orders', { n: s.reserved })}</span>}</span></li>
                   ))}
                 </ul>
               </Card>
@@ -227,7 +233,7 @@ function PriceModal({ open, onClose, productId, levels, branches, onDone }: { op
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submit = async () => {
-    if (price === null) return setErr(t('Enter the new price'));
+    if (price === null) return setErr(t('Enter a price in pounds and pence, like 1.25'));
     setBusy(true); setErr(null);
     try {
       await api(`/v1/products/${productId}/prices`, { body: { price_pence: price, price_level_id: level || undefined, branch_id: branch || null,
@@ -266,7 +272,7 @@ function BarcodeModal({ open, onClose, productId, onDone }: { open: boolean; onC
         barcode: code, barcode_type: kind === 'plu' ? 'PLU' : kind === 'case' && code.length === 14 ? 'ITF14' : code.length === 8 ? 'EAN8' : 'EAN13',
         units_per_scan: kind === 'case' ? Number(units) : 1, is_pmp: kind === 'pmp', pmp_price_pence: kind === 'pmp' ? pmp : null } });
       onDone(); onClose(); setCode(''); setErr(null);
-    } catch (e) { setErr((e as Error).message); }
+    } catch (e) { setErr((e as ApiError).status === 409 ? t('This barcode is already used on another product.') : (e as Error).message); }
   };
   return (
     <Modal open={open} onClose={onClose} title={t("Add a barcode")} footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button onClick={submit}>{t("Add barcode")}</Button></>}>

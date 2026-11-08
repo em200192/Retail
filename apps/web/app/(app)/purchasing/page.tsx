@@ -46,12 +46,15 @@ function Requests({ data, loading, reload, manage }: { data?: any[]; loading: bo
   const { branchId } = useMe();
   const [open, setOpen] = useState(false);
   const review = async (id: string, decision: 'approve' | 'reject') => {
-    await api(`/v1/purchase-requests/${id}/review`, { body: { decision } });
-    toast(decision === 'approve' ? t('Added to the shopping list') : t('Request declined')); reload();
+    try {
+      await api(`/v1/purchase-requests/${id}/review`, { body: { decision } });
+      toast(decision === 'approve' ? t('Added to the shopping list') : t('Request declined'));
+    } catch (e) { toast((e as Error).message, 'danger'); }
+    reload();
   };
   return (
     <Card>
-      <CardHeader title={manage ? 'What your team needs' : 'Your requests'} description={t("Staff can ask from the till app: “We need this”.")}
+      <CardHeader title={manage ? t('What your team needs') : t('Your requests')} description={t("Staff can ask from the till app: “We need this”.")}
         action={<Button size="sm" variant="secondary" icon={<Plus className="size-4" />} onClick={() => setOpen(true)}>{t("New request")}</Button>} />
       {loading && !data ? <LoadingRows /> : !data?.length ? <EmptyState icon={<Inbox className="size-6" />} title={t("No requests")}>{t("When staff spot an empty shelf, their request appears here.")}</EmptyState> : (
         <Table>
@@ -118,19 +121,25 @@ function ShoppingList() {
   const groups = new Map<string, any[]>();
   for (const i of active) groups.set(i.supplier_name ?? t('No supplier yet'), [...(groups.get(i.supplier_name ?? t('No supplier yet')) ?? []), i]);
   const est = (i: any) => (i.estimated_unit_cost_pence ?? 0) * i.quantity;
-  const update = async (id: string, body: any) => { await api(`/v1/purchase-list/items/${id}`, { method: 'PATCH', body }); list.mutate(); };
+  const update = async (id: string, body: any) => {
+    try { await api(`/v1/purchase-list/items/${id}`, { method: 'PATCH', body }); } catch (e) { toast((e as Error).message, 'danger'); }
+    list.mutate();
+  };
 
   return (
     <div className="space-y-4">
       <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="font-semibold">{active.length} items on the list · {approved.length} ready to order</p>
+          <p className="font-semibold">{t('{n} items on the list · {m} ready to order', { n: active.length, m: approved.length })}</p>
           <p className="text-sm text-muted">{t("Estimated cost")}{" "}<span className="tabular font-medium text-ink">{formatGBP(active.reduce((a, i) => a + est(i), 0))}</span>{" "}{t("ex VAT")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" icon={<Sparkles className="size-4" />} loading={busy === 'gen'} onClick={async () => {
-            setBusy('gen'); const r = await api('/v1/purchase-list/generate', { body: { branch_id: branchId } }); setBusy(null); list.mutate();
-            toast(r.added.length ? t('{n} low-stock items added', { n: r.added.length }) : t('Nothing new is running low'));
+            setBusy('gen');
+            try {
+              const r = await api('/v1/purchase-list/generate', { body: { branch_id: branchId } }); list.mutate();
+              toast(r.added.length ? t('{n} low-stock items added', { n: r.added.length }) : t('Nothing new is running low'));
+            } catch (e) { toast((e as Error).message, 'danger'); } finally { setBusy(null); }
           }}>{t("Add low-stock items")}</Button>
           <Button variant="secondary" icon={<Plus className="size-4" />} onClick={() => setAdding(true)}>{t("Add item")}</Button>
           {can('purchasing.order') && <Button icon={<Truck className="size-4" />} disabled={!approved.length} loading={busy === 'po'} onClick={async () => {
@@ -209,7 +218,10 @@ function Orders() {
           <CardHeader title={<span className="flex items-center gap-2">{po.supplier_name}<span className="font-mono text-xs text-subtle">{po.po_number}</span></span>}
             description={`${t('Created {date}', { date: formatDateUK(po.created_at) })}${po.sent_at ? ` · ${t('sent {date} by {how}', { date: formatDateUK(po.sent_at), how: t(po.sent_via) })}` : ''}`}
             action={<div className="flex items-center gap-2"><Badge tone={PO_STATUS[po.status]}>{t(po.status.replace('_', ' '))}</Badge>
-              {po.status === 'draft' && <Button size="sm" icon={<Send className="size-4" />} onClick={async () => { await api(`/v1/purchase-orders/${po.id}/send`, { body: {} }); pos.mutate(); toast(t('Order sent to supplier')); }}>{t("Send")}</Button>}</div>} />
+              {po.status === 'draft' && <Button size="sm" icon={<Send className="size-4" />} onClick={async () => {
+                try { await api(`/v1/purchase-orders/${po.id}/send`, { body: {} }); toast(t('Order sent to supplier')); } catch (e) { toast((e as Error).message, 'danger'); }
+                pos.mutate();
+              }}>{t("Send")}</Button>}</div>} />
           <Table>
             <thead><tr><Th>{t("Product")}</Th><Th align="right">{t("Ordered")}</Th><Th align="right">{t("Received")}</Th><Th align="right">{t("Cost each")}</Th><Th align="right">{t("Line")}</Th></tr></thead>
             <tbody>{(po.lines ?? []).map((l: any) => (
@@ -230,10 +242,18 @@ function Suppliers() {
   const sup = useApi<any[]>('/v1/suppliers');
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ name: '', email: '', phone: '', account_number: '', order_method: 'email', lead_time_days: '' });
+  const [err, setErr] = useState<string | null>(null);
   const save = async () => {
-    await api('/v1/suppliers', { body: { ...f, email: f.email || null, phone: f.phone || null, account_number: f.account_number || null,
-      lead_time_days: f.lead_time_days ? Number(f.lead_time_days) : null } });
-    sup.mutate(); setOpen(false); toast(t('{name} added', { name: f.name }));
+    if (!f.name.trim()) return setErr(t('Enter the supplier’s name'));
+    if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) return setErr(t('Enter an email address in the correct format, like name@example.com'));
+    if (f.order_method === 'email' && !f.email) return setErr(t('Enter the email address orders should go to'));
+    setErr(null);
+    try {
+      await api('/v1/suppliers', { body: { ...f, name: f.name.trim(), email: f.email || null, phone: f.phone || null, account_number: f.account_number || null,
+        lead_time_days: f.lead_time_days ? Number(f.lead_time_days) : null } });
+      sup.mutate(); setOpen(false); toast(t('{name} added', { name: f.name }));
+      setF({ name: '', email: '', phone: '', account_number: '', order_method: 'email', lead_time_days: '' });
+    } catch (e) { setErr((e as Error).message); }
   };
   return (
     <Card>
@@ -249,7 +269,8 @@ function Suppliers() {
           ))}</tbody>
         </Table>
       )}
-      <Modal open={open} onClose={() => setOpen(false)} title={t("Add supplier")} footer={<><Button variant="secondary" onClick={() => setOpen(false)}>{t("Cancel")}</Button><Button onClick={save} disabled={!f.name}>{t("Add supplier")}</Button></>}>
+      <Modal open={open} onClose={() => setOpen(false)} title={t("Add supplier")} footer={<><Button variant="secondary" onClick={() => setOpen(false)}>{t("Cancel")}</Button><Button onClick={save}>{t("Add supplier")}</Button></>}>
+        {err && <p role="alert" className="text-sm font-medium text-danger">{err}</p>}
         <Field label={t("Name")} htmlFor="sn"><Input id="sn" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <div className="grid grid-cols-2 gap-4">
           <Field label={t("Email")} htmlFor="se"><Input id="se" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>

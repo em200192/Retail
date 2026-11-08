@@ -1,5 +1,5 @@
 'use client';
-import { daysAgoUK, todayUK } from '@retail/shared';
+import { daysAgoUK, formatGBP, todayUK } from '@retail/shared';
 import { formatDateUK, formatTimeUK } from '@/lib/format';
 import { Receipt as ReceiptIcon, Search } from 'lucide-react';
 import { useState } from 'react';
@@ -13,6 +13,8 @@ const STATUS: Record<string, { label: string; tone: 'success' | 'neutral' | 'war
   completed: { label: 'Completed', tone: 'success' }, voided: { label: 'Voided', tone: 'danger' },
   partially_refunded: { label: 'Part refunded', tone: 'warning' }, refunded: { label: 'Refunded', tone: 'warning' }, parked: { label: 'Parked', tone: 'neutral' },
 };
+
+const REFUND_REASONS: Record<string, string> = { changed_mind: 'Changed mind', faulty: 'Faulty', damaged: 'Damaged', wrong_item: 'Wrong item', out_of_date: 'Out of date' };
 
 export default function SalesPage() {
   const { branchId } = useMe();
@@ -34,8 +36,8 @@ export default function SalesPage() {
       <Card>
         <div className="flex flex-col gap-3 border-b border-line p-4 lg:flex-row lg:items-end">
           <div className="flex gap-3">
-            <div><label htmlFor="f" className="mb-1 block text-xs font-medium text-muted">{t("From")}</label><Input id="f" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></div>
-            <div><label htmlFor="t" className="mb-1 block text-xs font-medium text-muted">{t("To")}</label><Input id="t" type="date" value={to} min={from} max={todayUK()} onChange={(e) => setTo(e.target.value)} /></div>
+            <div><label htmlFor="f" className="mb-1 block text-xs font-medium text-muted">{t("From")}</label><Input id="f" type="date" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} /></div>
+            <div><label htmlFor="t" className="mb-1 block text-xs font-medium text-muted">{t("To")}</label><Input id="t" type="date" value={to} min={from} max={todayUK()} onChange={(e) => e.target.value && setTo(e.target.value)} /></div>
           </div>
           <div className="flex gap-1.5">
             {[[t('Today'), 0, 0], [t('Yesterday'), 1, 1], [t('Last 7 days'), 6, 0]].map(([l, a, b]) => (
@@ -79,7 +81,7 @@ export default function SalesPage() {
         {detail.data ? <Receipt sale={detail.data} staffName={names.get(detail.data.staff_id)} /> : <LoadingRows rows={6} />}
         {detail.data?.refunds?.length > 0 && (
           <div className="rounded-lg bg-warning-tint p-3 text-sm text-warning">
-            {detail.data.refunds.map((r: any) => <p key={r.id}>{t("Refunded")}{" "}<Money pence={r.total_pence} /> on {formatDateUK(r.occurred_at)} · {r.reason_code.replace(/_/g, ' ')}</p>)}
+            {detail.data.refunds.map((r: any) => <p key={r.id}>{t('Refunded {amount} on {date}', { amount: formatGBP(r.total_pence), date: formatDateUK(r.occurred_at) })} · {t(REFUND_REASONS[r.reason_code] ?? r.reason_code.replace(/_/g, ' '))}</p>)}
           </div>
         )}
       </Modal>

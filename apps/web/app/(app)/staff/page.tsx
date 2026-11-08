@@ -1,6 +1,6 @@
 'use client';
 import { formatDateUK } from '@/lib/format';
-import { KeyRound, Lock, Plus, Users } from 'lucide-react';
+import { KeyRound, Lock, Pencil, Plus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, LoadingRows, Modal, PageHeader, Select, Table, Tabs, Td, Th, Toggle, useToast } from '@/components/ui';
 import { api, useApi } from '@/lib/api';
@@ -35,6 +35,7 @@ function People() {
   const roles = useApi<any[]>('/v1/roles');
   const [adding, setAdding] = useState(false);
   const [pinFor, setPinFor] = useState<any | null>(null);
+  const [editing, setEditing] = useState<any | null>(null);
   const branchName = new Map((me?.branches ?? []).map((b) => [b.id, b.name]));
   return (
     <Card>
@@ -52,49 +53,67 @@ function People() {
               <Td className="text-muted">{t(EMPLOYMENT[s.employment_type] ?? '')}{s.start_date && <span className="block text-xs">{t('since')} {formatDateUK(s.start_date, { month: 'short', year: 'numeric' })}</span>}</Td>
               <Td>{s.has_pin ? <Badge tone="success">{t("Set")}</Badge> : <Badge tone="warning">{t("Not set")}</Badge>}</Td>
               <Td><Badge tone={s.status === 'active' ? 'success' : 'neutral'}>{t(s.status === 'left' ? 'Left' : s.status[0].toUpperCase() + s.status.slice(1))}</Badge></Td>
-              {can('staff.manage') && <Td align="right"><Button size="sm" variant="ghost" icon={<KeyRound className="size-4" />} onClick={() => setPinFor(s)}>{s.has_pin ? t('Reset PIN') : t('Set PIN')}</Button></Td>}
+              {can('staff.manage') && <Td align="right"><div className="flex justify-end gap-1">
+                <Button size="sm" variant="ghost" icon={<Pencil className="size-4" />} onClick={() => setEditing(s)}>{t('Edit')}</Button>
+                <Button size="sm" variant="ghost" icon={<KeyRound className="size-4" />} onClick={() => setPinFor(s)}>{s.has_pin ? t('Reset PIN') : t('Set PIN')}</Button>
+              </div></Td>}
             </tr>
           ))}</tbody>
         </Table>
       )}
       {adding && <AddStaff roles={roles.data ?? []} onClose={() => setAdding(false)} onDone={(n) => { staff.mutate(); toast(t('{name} added — they can sign in at the till with their PIN', { name: n })); }} />}
+      {editing && <AddStaff person={editing} roles={roles.data ?? []} onClose={() => setEditing(null)} onDone={(n) => { staff.mutate(); toast(t('Changes saved for {name}', { name: n })); }} />}
       {pinFor && <PinModal person={pinFor} onClose={() => setPinFor(null)} onDone={() => { staff.mutate(); toast(t('PIN updated for {name}', { name: pinFor.first_name })); }} />}
     </Card>
   );
 }
 
-function AddStaff({ roles, onClose, onDone }: { roles: any[]; onClose: () => void; onDone: (name: string) => void }) {
+/** Adds a member of staff, or edits one when `person` is given. */
+function AddStaff({ roles, onClose, onDone, person }: { roles: any[]; onClose: () => void; onDone: (name: string) => void; person?: any }) {
   const { me, branchId } = useMe();
-  const [f, setF] = useState({ first_name: '', last_name: '', email: '', role_id: '', employment_type: 'part_time', date_of_birth: '', start_date: '', pin: '' });
-  const [branches, setBranches] = useState<string[]>(branchId ? [branchId] : []);
+  const [f, setF] = useState(person ? { first_name: person.first_name, last_name: person.last_name ?? '', email: person.email ?? '', role_id: person.role_id,
+    employment_type: person.employment_type ?? 'part_time', date_of_birth: '', start_date: person.start_date ?? '', pin: '', status: person.status }
+    : { first_name: '', last_name: '', email: '', role_id: '', employment_type: 'part_time', date_of_birth: '', start_date: '', pin: '', status: 'active' });
+  const [branches, setBranches] = useState<string[]>(person ? person.branch_ids : branchId ? [branchId] : []);
+  const isOwnerRole = roles.find((r) => r.id === f.role_id)?.system_key === 'owner';
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { if (!f.role_id && roles.length) setF((x) => ({ ...x, role_id: roles.find((r) => r.system_key === 'cashier')?.id ?? roles[0].id })); }, [roles, f.role_id]);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const submit = async () => {
     if (!f.first_name.trim()) return setErr(t('Enter their first name'));
+    if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) return setErr(t('Enter an email address in the correct format, like name@example.com'));
     if (f.pin && !/^\d{4,8}$/.test(f.pin)) return setErr(t('The PIN must be 4 to 8 digits'));
-    if (!branches.length) return setErr(t('Choose at least one branch'));
+    if (!branches.length && !isOwnerRole) return setErr(t('Choose at least one branch'));
     try {
+      if (person) {
+        await api(`/v1/staff/${person.id}`, { method: 'PATCH', body: { first_name: f.first_name.trim(), last_name: f.last_name || null, email: f.email || null,
+          role_id: f.role_id, employment_type: f.employment_type, start_date: f.start_date || null, status: f.status,
+          ...(branches.length ? { branch_ids: branches } : {}) } });
+        onDone(f.first_name.trim()); onClose(); return;
+      }
       await api('/v1/staff', { body: { first_name: f.first_name.trim(), last_name: f.last_name || null, email: f.email || null, role_id: f.role_id,
         employment_type: f.employment_type, date_of_birth: f.date_of_birth || null, start_date: f.start_date || null, branch_ids: branches, pin: f.pin || undefined } });
       onDone(f.first_name); onClose();
     } catch (e) { setErr((e as Error).message); }
   };
   return (
-    <Modal open onClose={onClose} title={t("Add a member of staff")} wide footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button onClick={submit}>{t("Add staff")}</Button></>}>
+    <Modal open onClose={onClose} title={person ? t('Edit {name}', { name: person.first_name }) : t("Add a member of staff")} wide
+      footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button onClick={submit}>{person ? t('Save changes') : t("Add staff")}</Button></>}>
       {err && <p role="alert" className="text-sm font-medium text-danger">{err}</p>}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={t("First name")} htmlFor="fn"><Input id="fn" value={f.first_name} onChange={set('first_name')} autoComplete="off" /></Field>
         <Field label={t("Last name")} htmlFor="ln"><Input id="ln" value={f.last_name} onChange={set('last_name')} autoComplete="off" /></Field>
-        <Field label={t("Email (optional)")} htmlFor="em" hint={t("Needed to use the back office.")}><Input id="em" type="email" value={f.email} onChange={set('email')} /></Field>
+        <Field label={t("Email (optional)")} htmlFor="em" hint={t("For your records. Staff sign in at the till with their PIN.")}><Input id="em" type="email" value={f.email} onChange={set('email')} /></Field>
         <Field label={t("Role")} htmlFor="ro"><Select id="ro" value={f.role_id} onChange={set('role_id')}>
-          {roles.filter((r) => r.system_key !== 'owner' || me?.staff.role_key === 'owner').map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</Select></Field>
+          {roles.filter((r) => r.system_key !== 'owner' || me?.staff.role_key === 'owner').map((r) => <option key={r.id} value={r.id}>{t(r.name)}</option>)}</Select></Field>
         <Field label={t("Contract")} htmlFor="ct"><Select id="ct" value={f.employment_type} onChange={set('employment_type')}>
           {Object.entries(EMPLOYMENT).map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}</Select></Field>
-        <Field label={t("Date of birth")} htmlFor="dob" hint={t("Used to check National Minimum Wage age bands.")}><Input id="dob" type="date" value={f.date_of_birth} onChange={set('date_of_birth')} /></Field>
+        {!person && <Field label={t("Date of birth")} htmlFor="dob" hint={t("Used to check National Minimum Wage age bands.")}><Input id="dob" type="date" value={f.date_of_birth} onChange={set('date_of_birth')} /></Field>}
         <Field label={t("Start date")} htmlFor="sd"><Input id="sd" type="date" value={f.start_date} onChange={set('start_date')} /></Field>
-        <Field label={t("Till PIN")} htmlFor="pin" hint={t("4–8 digits. They can change it later.")}><Input id="pin" type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} value={f.pin}
-          onChange={(e) => setF({ ...f, pin: e.target.value.replace(/\D/g, '') })} /></Field>
+        {person && <Field label={t("Status")} htmlFor="st" hint={t("People who have left or are suspended can’t sign in at the till.")}><Select id="st" value={f.status} onChange={set('status')}>
+          <option value="active">{t('Active')}</option><option value="suspended">{t('Suspended')}</option><option value="left">{t('Left')}</option></Select></Field>}
+        {!person && <Field label={t("Till PIN")} htmlFor="pin" hint={t("4–8 digits. They can change it later.")}><Input id="pin" type="password" inputMode="numeric" autoComplete="new-password" maxLength={8} value={f.pin}
+          onChange={(e) => setF({ ...f, pin: e.target.value.replace(/\D/g, '') })} /></Field>}
       </div>
       <fieldset>
         <legend className="mb-2 text-sm font-medium">{t("Works at")}</legend>
@@ -155,7 +174,7 @@ function Roles() {
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[16rem_1fr]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[16rem_1fr]">
       <Card className="h-fit p-2">
         <ul>{roles.data?.map((r) => (
           <li key={r.id}><button onClick={() => setSel(r.id)} aria-current={r.id === role.id}

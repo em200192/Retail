@@ -17,12 +17,13 @@ interface Ctx {
   setBranchId: (id: string) => void;
   can: (...perms: string[]) => boolean;
   reload: () => void;
+  error: unknown;
 }
 
-const MeCtx = createContext<Ctx>({ me: undefined, branchId: null, branch: undefined, setBranchId: () => {}, can: () => false, reload: () => {} });
+const MeCtx = createContext<Ctx>({ me: undefined, branchId: null, branch: undefined, setBranchId: () => {}, can: () => false, reload: () => {}, error: undefined });
 
 export function MeProvider({ children }: { children: React.ReactNode }) {
-  const { data, mutate } = useApi<Me>('/v1/me');
+  const { data, mutate, error } = useApi<Me>('/v1/me');
   const [branchId, setBranch] = useState<string | null>(null);
   useEffect(() => {
     if (!data) return;
@@ -38,7 +39,8 @@ export function MeProvider({ children }: { children: React.ReactNode }) {
     setBranchId: (id) => { setBranch(id); try { localStorage.setItem('counter.branch', id); } catch { /* ignore */ } },
     can: (...perms) => !!data && perms.some((p) => data.permissions.includes(p)),
     reload: () => void mutate(),
-  }), [data, branchId, mutate]);
+    error,
+  }), [data, branchId, mutate, error]);
   return <MeCtx.Provider value={value}>{children}</MeCtx.Provider>;
 }
 

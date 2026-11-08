@@ -68,7 +68,7 @@ function Dashboard() {
                 trend={pct(today?.avg_basket_pence ?? 0, lastWeek?.avg_basket_pence ?? 0)} sub={t("vs last week")} />
               <Stat label={t("Gross margin")} icon={<TrendingUp className="size-4" />}
                 value={marginPct === null ? '—' : `${marginPct.toFixed(1)}%`}
-                sub={today?.gross_margin_pence !== undefined ? t('{amount} profit before costs', { amount: formatGBP(today.gross_margin_pence) }) : t('Needs finance access')} />
+                sub={!can('reports.financial') ? t('Needs finance access') : today?.gross_margin_pence !== undefined ? t('{amount} profit before costs', { amount: formatGBP(today.gross_margin_pence) }) : t('No sales yet today')} />
             </>
           )}
         </section>

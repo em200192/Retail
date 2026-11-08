@@ -49,7 +49,8 @@ export default function SignupPage() {
     }) });
     const data = await res.json().catch(() => ({ message: t('Counter cannot reach the server right now. Try again in a minute.') }));
     setBusy(false);
-    if (!res.ok) return setError(data.message ?? t('Could not create your account'));
+    if (res.status === 409) { setStep(1); setErrors({ email: t('An account with this email already exists. Sign in instead, or use a different email.') }); return; }
+    if (!res.ok) return setError(data.message ? t(data.message) : t('Could not create your account'));
     router.replace('/?welcome=1');
   };
 

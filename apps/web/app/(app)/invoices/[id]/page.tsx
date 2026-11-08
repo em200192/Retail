@@ -39,12 +39,18 @@ export default function InvoicePage() {
   if (inv.isLoading) return <Card><LoadingRows rows={8} /></Card>;
   if (!d) return <ErrorNote error={inv.error} />;
   const open = ['needs_review', 'approved'].includes(d.status);
+  // The worker moves an invoice to 'processing' within seconds. Still 'uploaded' after 2 minutes = reading isn't running.
+  const stuck = d.status === 'uploaded' && Date.now() - new Date(d.created_at).getTime() > 2 * 60 * 1000;
+  const rejectable = open || stuck || d.status === 'failed';
   const lines: any[] = d.lines;
   const unresolved = lines.filter((l) => l.match_status !== 'ignored' && !l.product_id).length;
   const guesses = lines.filter((l) => l.match_status === 'matched_auto' && l.match_confidence < 0.95).length;
   const linesTotal = lines.reduce((a, l) => a + (l.line_total_pence ?? 0), 0);
 
-  const patchLine = async (lineId: string, body: any) => { await api(`/v1/invoices/${id}/lines/${lineId}`, { method: 'PATCH', body }); inv.mutate(); };
+  const patchLine = async (lineId: string, body: any) => {
+    try { await api(`/v1/invoices/${id}/lines/${lineId}`, { method: 'PATCH', body }); } catch (e) { toast((e as Error).message, 'danger'); }
+    inv.mutate();
+  };
   const post = async () => {
     setBusy(true);
     try { const r = await api(`/v1/invoices/${id}/post`, { body: {} }); toast(t('{n} products booked into stock. We’ll remember these supplier codes.', { n: r.lines_received })); inv.mutate(); }
@@ -57,17 +63,18 @@ export default function InvoicePage() {
       <PageHeader title={`${d.supplier_name ?? t('Supplier invoice')}${d.invoice_number ? ` · ${d.invoice_number}` : ''}`}
         description={<span className="inline-flex items-center gap-2"><Badge tone={INVOICE_STATUS[d.status]?.tone}>{t(INVOICE_STATUS[d.status]?.label ?? '')}</Badge>
           {d.invoice_date && <>{t('Dated {date}', { date: formatDateUK(d.invoice_date) })}</>}{d.ocr_confidence !== null && <span className="text-subtle">· {t('read with {n}% confidence', { n: Math.round(d.ocr_confidence * 100) })}</span>}</span>}
-        actions={open && approve && <>
+        actions={rejectable && approve && <>
           <Button variant="ghost" onClick={() => setRejecting(true)}>{t("Reject")}</Button>
-          {unresolved > 0 && can('products.edit') && can('prices.edit') && <Button variant="secondary" icon={<Wand2 className="size-4" />} loading={bulk} onClick={async () => {
+          {open && unresolved > 0 && can('products.edit') && can('prices.edit') && <Button variant="secondary" icon={<Wand2 className="size-4" />} loading={bulk} onClick={async () => {
             setBulk(true);
             try { const r = await api(`/v1/invoices/${id}/create-missing-products`, { body: {} }); toast(t('{n} new products created from this invoice', { n: r.created.length })); inv.mutate(); }
             catch (e) { toast((e as Error).message, 'danger'); } finally { setBulk(false); }
           }}>{t('Create all missing products')}</Button>}
-          <Button icon={<PackageCheck className="size-4" />} disabled={unresolved > 0} loading={busy} onClick={post}>{t("Book into stock")}</Button>
+          {open && <Button icon={<PackageCheck className="size-4" />} disabled={unresolved > 0} loading={busy} onClick={post}>{t("Book into stock")}</Button>}
         </>} />
       {d.ocr_error && <div role="alert" className="mb-6 rounded-xl border border-danger/30 bg-danger-tint p-4 text-sm text-danger">{t(d.ocr_error)}</div>}
-      {['uploaded', 'processing'].includes(d.status) && <Card className="mb-6 p-5 text-sm text-muted">{t("We’re reading this invoice. This usually takes under a minute — the page updates by itself.")}{d.ocr_progress && <span className="mt-1 block font-medium text-ink" role="status">{t(d.ocr_progress.text, d.ocr_progress.vars)}</span>}</Card>}
+      {stuck && <div role="alert" className="mb-6 rounded-xl border border-warning/30 bg-warning-tint p-4 text-sm text-warning">{t("Counter hasn’t been able to start reading this invoice. Automatic reading may be switched off or busy. Try uploading it again later, or reject it and book the stock in with “Goods in” on the Stock page.")}</div>}
+      {!stuck && ['uploaded', 'processing'].includes(d.status) && <Card className="mb-6 p-5 text-sm text-muted">{t("We’re reading this invoice. This usually takes under a minute — the page updates by itself.")}{d.ocr_progress && <span className="mt-1 block font-medium text-ink" role="status">{t(d.ocr_progress.text, d.ocr_progress.vars)}</span>}</Card>}
 
       {open && (
         <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -78,7 +85,7 @@ export default function InvoicePage() {
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-4">
+      {(lines.length > 0 || open) && <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
         <Card className="xl:col-span-3">
           <CardHeader title={t("Lines")} description={t("Tick off best guesses or pick the right product. Each fix teaches Counter for next time.")} />
           <Table>
@@ -120,18 +127,20 @@ export default function InvoicePage() {
           {open && approve && (
             <div className="border-t border-line px-5 py-4">
               <Field label={t("Supplier")} htmlFor="sup"><Select id="sup" value={d.supplier_id ?? ''} onChange={async (e) => {
-                await api(`/v1/invoices/${id}`, { method: 'PATCH', body: { supplier_id: e.target.value } }); inv.mutate(); }}>
+                try { await api(`/v1/invoices/${id}`, { method: 'PATCH', body: { supplier_id: e.target.value } }); } catch (err) { toast((err as Error).message, 'danger'); }
+                inv.mutate(); }}>
                 <option value="" disabled>{t("Choose…")}</option>{(suppliers.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
             </div>
           )}
         </Card>
-      </div>
+      </div>}
 
       {creating && <CreateProductModal line={creating} invoiceId={id} onClose={() => setCreating(null)} onDone={(name) => { setCreating(null); inv.mutate(); toast(t('{name} added to your products', { name })); }} />}
       {editing && <LineEditor line={editing} onClose={() => setEditing(null)} onSave={async (body) => { await patchLine(editing.id, body); setEditing(null); }} />}
       <Modal open={rejecting} onClose={() => setRejecting(false)} title={t("Reject this invoice?")} description={t("Nothing is booked into stock. You can upload it again later.")}
         footer={<><Button variant="secondary" onClick={() => setRejecting(false)}>{t("Cancel")}</Button><Button variant="danger" disabled={!reason} onClick={async () => {
-          await api(`/v1/invoices/${id}/reject`, { body: { reason } }); setRejecting(false); inv.mutate(); toast(t('Invoice rejected')); }}>{t("Reject invoice")}</Button></>}>
+          try { await api(`/v1/invoices/${id}/reject`, { body: { reason } }); toast(t('Invoice rejected')); } catch (e) { toast((e as Error).message, 'danger'); }
+          setRejecting(false); inv.mutate(); }}>{t("Reject invoice")}</Button></>}>
         <Field label={t("Why?")} htmlFor="rr"><Input id="rr" value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("Wrong shop, duplicate, unreadable…")} /></Field>
       </Modal>
     </>

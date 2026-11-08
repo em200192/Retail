@@ -47,7 +47,7 @@ export default function ProductsPage() {
         ) : (
           <Table>
             <thead><tr>
-              <Th>{t("Product")}</Th><Th>{t("Category")}</Th><Th>{t("Barcode")}</Th><Th>VAT</Th><Th align="right">{t("Price")}</Th>
+              <Th>{t("Product")}</Th><Th className="hidden md:table-cell">{t("Category")}</Th><Th className="hidden sm:table-cell">{t("Barcode")}</Th><Th>VAT</Th><Th align="right">{t("Price")}</Th>
               {showCost && <><Th align="right">{t("Avg cost")}</Th><Th align="right">{t("Margin")}</Th></>}
             </tr></thead>
             <tbody>
@@ -64,8 +64,8 @@ export default function ProductsPage() {
                         {p.archived_at && <Badge>{t("Archived")}</Badge>}
                       </div>
                     </Td>
-                    <Td className="text-muted">{catName.get(p.category_id) ?? '—'}</Td>
-                    <Td className="font-mono text-xs text-muted">{p.barcode ?? '—'}</Td>
+                    <Td className="hidden md:table-cell text-muted">{catName.get(p.category_id) ?? '—'}</Td>
+                    <Td className="hidden sm:table-cell font-mono text-xs text-muted">{p.barcode ?? '—'}</Td>
                     <Td><Badge tone={p.vat_code === 'S' ? 'brand' : 'neutral'}>{t(VAT_LABELS[p.vat_code] ?? '')}</Badge></Td>
                     <Td align="right" className="font-medium">{p.retail_price_pence === null ? <span className="text-warning">{t("No price")}</span> : formatGBP(p.retail_price_pence)}</Td>
                     {showCost && <>
@@ -79,7 +79,7 @@ export default function ProductsPage() {
           </Table>
         )}
       </Card>
-      {products.data && <p className="mt-3 text-sm text-subtle">{products.data.length} products. Margins are on the retail price excluding VAT.</p>}
+      {products.data && <p className="mt-3 text-sm text-subtle">{t('{n} products. Margins are on the retail price excluding VAT.', { n: products.data.length })}</p>}
     </>
   );
 }

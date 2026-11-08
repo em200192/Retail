@@ -103,7 +103,7 @@ export function Stat({ label, value, sub, trend, icon }: { label: string; value:
 
 export function Table({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cx('overflow-x-auto', className)}>
+    <div className={cx('relative overflow-x-auto', className)}>
       <table className="w-full text-sm border-collapse">{children}</table>
     </div>
   );

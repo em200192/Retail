@@ -23,7 +23,7 @@ export default function ReportsPage() {
   const sum = (k: string) => rows.reduce((a, r) => a + (r[k] ?? 0), 0);
   const fin = can('reports.financial');
   const days = Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1;
-  const series = Array.from({ length: Math.min(days, 92) }, (_, i) => {
+  const series = Array.from({ length: Math.max(0, Math.min(days, 92)) }, (_, i) => {
     const d = new Date(new Date(from).getTime() + i * 86400000).toISOString().slice(0, 10);
     const r = rows.find((x) => x.business_date === d);
     return { date: d, value: r ? r.net_sales_pence + r.vat_pence : 0, sub: r ? t('{n} transactions', { n: r.transactions }) : t('No sales') };
@@ -33,8 +33,8 @@ export default function ReportsPage() {
     <>
       <PageHeader title={t("Reports")} description={t("Figures exclude training-mode sales. Takings include VAT; margins are on sales excluding VAT.")}
         actions={<div className="flex items-end gap-2">
-          <div><label htmlFor="rf" className="mb-1 block text-xs font-medium text-muted">{t("From")}</label><Input id="rf" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></div>
-          <div><label htmlFor="rt" className="mb-1 block text-xs font-medium text-muted">{t("To")}</label><Input id="rt" type="date" value={to} min={from} max={todayUK()} onChange={(e) => setTo(e.target.value)} /></div>
+          <div><label htmlFor="rf" className="mb-1 block text-xs font-medium text-muted">{t("From")}</label><Input id="rf" type="date" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} /></div>
+          <div><label htmlFor="rt" className="mb-1 block text-xs font-medium text-muted">{t("To")}</label><Input id="rt" type="date" value={to} min={from} max={todayUK()} onChange={(e) => e.target.value && setTo(e.target.value)} /></div>
         </div>} />
       <Tabs value={tab} onChange={setTab} tabs={[{ id: 'takings', label: t('Takings') }, { id: 'products', label: t('Products') }, ...(can('reports.staff') ? [{ id: 'staff' as const, label: t('Staff activity') }] : [])]} />
 
@@ -73,7 +73,7 @@ export default function ReportsPage() {
             <Select id="ord" value={order} onChange={(e) => setOrder(e.target.value as typeof order)}>
               <option value="revenue">{t("By sales")}</option><option value="quantity">{t("By units")}</option>{fin && <option value="margin">{t("By profit")}</option>}</Select></div>} />
           {top.isLoading ? <LoadingRows /> : (
-            <div className="grid gap-6 px-5 pb-5 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 px-5 pb-5 lg:grid-cols-2">
               <RankBars rows={(top.data ?? []).slice(0, 10).map((it) => ({ label: it.name,
                 value: order === 'quantity' ? it.qty_sold : order === 'margin' ? it.margin_pence : it.net_sales_pence }))}
                 format={order === 'quantity' ? (v) => t('{n} sold', { n: v.toLocaleString('en-GB') }) : formatGBP} />

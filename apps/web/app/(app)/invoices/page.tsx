@@ -54,7 +54,7 @@ export default function InvoicesPage() {
       <Tabs value={filter} onChange={setFilter} tabs={[{ id: 'todo', label: t('To do'), count: rows.length && filter === 'todo' ? rows.length : undefined }, { id: 'all', label: t('All invoices') }]} />
       <Card>
         {inv.isLoading && !inv.data ? <LoadingRows /> : rows.length === 0 ? (
-          <EmptyState icon={<FileText className="size-6" />} title={filter === 'todo' ? 'All caught up' : 'No invoices yet'}>{t("Every invoice has been checked and booked in.")}</EmptyState>
+          <EmptyState icon={<FileText className="size-6" />} title={filter === 'todo' ? t('All caught up') : t('No invoices yet')}>{t("Every invoice has been checked and booked in.")}</EmptyState>
         ) : (
           <Table>
             <thead><tr><Th>{t("Supplier")}</Th><Th>{t("Invoice no.")}</Th><Th>{t("Date")}</Th><Th align="right">{t("Total")}</Th><Th>{t("Status")}</Th></tr></thead>
@@ -65,7 +65,8 @@ export default function InvoicesPage() {
                 <Td className="text-muted">{i.invoice_date ? formatDateUK(i.invoice_date) : formatDateUK(i.created_at)}</Td>
                 <Td align="right"><Money pence={i.total_pence} /></Td>
                 <Td><Badge tone={INVOICE_STATUS[i.status]?.tone}>{t(INVOICE_STATUS[i.status]?.label ?? '')}</Badge>
-                  {i.ocr_error && <p className="mt-1 max-w-xs truncate text-xs text-danger">{t(i.ocr_error)}</p>}</Td>
+                  {i.ocr_error && <p className="mt-1 max-w-xs truncate text-xs text-danger">{t(i.ocr_error)}</p>}
+                  {i.status === 'uploaded' && Date.now() - new Date(i.created_at).getTime() > 2 * 60 * 1000 && <p className="mt-1 text-xs text-warning">{t('Not read yet — open it to see why')}</p>}</Td>
               </tr>
             ))}</tbody>
           </Table>

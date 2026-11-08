@@ -67,7 +67,7 @@ function StockInner() {
             <EmptyState icon={<Boxes className="size-6" />} title={onlyLow ? t('Nothing is running low') : t('No stock yet')}>{onlyLow ? t('Every product is above its reorder point.') : t('Record a delivery to get started.')}</EmptyState>
           ) : (
             <Table>
-              <thead><tr><Th>{t("Product")}</Th><Th align="right">{t("On hand")}</Th><Th align="right">{t("Held for orders")}</Th><Th align="right">{t("Reorder at")}</Th><Th>{t("Status")}</Th><Th><span className="sr-only">{t("Actions")}</span></Th></tr></thead>
+              <thead><tr><Th>{t("Product")}</Th><Th align="right">{t("On hand")}</Th><Th align="right" className="hidden sm:table-cell">{t("Held for orders")}</Th><Th align="right" className="hidden sm:table-cell">{t("Reorder at")}</Th><Th>{t("Status")}</Th><Th><span className="sr-only">{t("Actions")}</span></Th></tr></thead>
               <tbody>{levels.data?.map((l) => {
                 const low = l.reorder_point !== null && l.on_hand <= l.reorder_point;
                 const out = l.on_hand <= 0;
@@ -75,8 +75,8 @@ function StockInner() {
                   <tr key={l.product_id} className="hover:bg-surface/60">
                     <Td className="font-medium">{l.name}{l.shelf_location && <span className="ms-2 text-xs text-subtle">{l.shelf_location}</span>}</Td>
                     <Td align="right" className="font-semibold">{l.on_hand}</Td>
-                    <Td align="right" className="text-muted">{l.reserved || '—'}</Td>
-                    <Td align="right" className="text-muted">{l.reorder_point ?? '—'}</Td>
+                    <Td align="right" className="hidden sm:table-cell text-muted">{l.reserved || '—'}</Td>
+                    <Td align="right" className="hidden sm:table-cell text-muted">{l.reorder_point ?? '—'}</Td>
                     <Td>{out ? <Badge tone="danger">{t("Out of stock")}</Badge> : low ? <Badge tone="warning">{t("Running low")}</Badge> : <Badge tone="success">{t("In stock")}</Badge>}</Td>
                     <Td align="right">
                       {can('stock.adjust') && <Button size="sm" variant="ghost" onClick={() => setAction({ kind: 'receive', product: { id: l.product_id, name: l.name } })}>{t("Goods in")}</Button>}
@@ -175,7 +175,7 @@ function StockActionModal({ action, onClose, onDone, branchId }: { action: Actio
 
   return (
     <Modal open onClose={onClose} title={title}
-      description={action.kind === 'adjust' ? 'Use this when a count shows the system is wrong. It adds a correcting entry.' : undefined}
+      description={action.kind === 'adjust' ? t('Use this when a count shows the system is wrong. It adds a correcting entry.') : undefined}
       footer={<><Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button><Button variant={action.kind === 'waste' ? 'danger' : 'primary'} onClick={submit} loading={busy}>{title}</Button></>}>
       {err && <p role="alert" className="rounded-lg bg-danger-tint px-3 py-2 text-sm font-medium text-danger">{err}</p>}
       <Field label={t("Product")} htmlFor="pp"><ProductPicker id="pp" value={product} onChange={setProduct} /></Field>
