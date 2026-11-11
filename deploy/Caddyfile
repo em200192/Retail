@@ -1,0 +1,24 @@
+# HTTPS certificates are issued automatically (Let's Encrypt).
+{
+	email {$ACME_EMAIL}
+}
+
+app.{$DOMAIN} {
+	encode gzip
+	reverse_proxy web:3001
+}
+
+api.{$DOMAIN} {
+	encode gzip
+	request_body {
+		max_size 40MB
+	}
+	reverse_proxy api:3000
+}
+
+till.{$DOMAIN} {
+	encode gzip
+	root * /srv/till
+	try_files {path} {path}.html /index.html
+	file_server
+}
