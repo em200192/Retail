@@ -1,0 +1,114 @@
+# TillMate production stack.
+#   cp .env.example .env   (fill in the values)
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Opens: https://app.$DOMAIN (back office) · https://till.$DOMAIN (till) · https://api.$DOMAIN (API)
+name: tillmate
+
+x-app: &app
+  image: tillmate-app
+  pull_policy: never
+  restart: unless-stopped
+  environment: &app-env
+    NODE_ENV: production
+    DATABASE_URL: postgres://retail_api:${API_DB_PASSWORD:?set API_DB_PASSWORD in .env}@db/retail
+    WORKER_DATABASE_URL: postgres://retail_worker:${WORKER_DB_PASSWORD:?set WORKER_DB_PASSWORD in .env}@db/retail
+    JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (64 hex characters)}
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    FILE_STORE_DIR: /data/files
+    CORS_ORIGINS: https://till.${DOMAIN}
+    TRUST_PROXY: "1"
+  volumes:
+    - files:/data/files
+
+services:
+  # PostgreSQL 16 — all shop data.
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?set PG_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 30
+
+  # Builds the app image, then creates the database, login roles and applies migrations (safe to re-run).
+  migrate:
+    <<: *app
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: app
+      args:
+        NEXT_PUBLIC_API_URL: https://api.${DOMAIN:?set DOMAIN in .env}
+    restart: "no"
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      ADMIN_URL: postgres://postgres:${PG_PASSWORD}@db/postgres
+      DB_NAME: retail
+      API_PASSWORD: ${API_DB_PASSWORD}
+      WORKER_PASSWORD: ${WORKER_DB_PASSWORD}
+    command: ["./db/setup-dev.sh"]
+
+  # REST API (Fastify) on :3000.
+  api:
+    <<: *app
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    working_dir: /app/apps/api
+    command: ["npx", "tsx", "src/server.ts"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      retries: 30
+
+  # Background jobs: invoice reading, outbox, emails, daily summaries.
+  worker:
+    <<: *app
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    working_dir: /app/apps/api
+    command: ["npx", "tsx", "src/worker/main.ts"]
+
+  # Back office (Next.js) on :3001.
+  web:
+    <<: *app
+    depends_on:
+      api: { condition: service_healthy }
+    working_dir: /app/apps/web
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:3000
+    volumes: []
+    command: ["npx", "next", "start", "-p", "3001"]
+
+  # Caddy: HTTPS (automatic certificates) for app./api./till. and serves the till web app.
+  proxy:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: proxy
+      args:
+        NEXT_PUBLIC_API_URL: https://api.${DOMAIN}
+    restart: unless-stopped
+    depends_on: [web, api]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  files:
+  caddy_data:
+  caddy_config:

@@ -6,6 +6,8 @@ On a fresh Ubuntu 22.04/24.04 server (2 GB RAM or more), from the repository roo
 sudo ./deploy/install.sh
 ```
 
+Or by hand: `cp .env.example .env`, fill it in, then `docker compose -f docker-compose.prod.yml up -d --build`.
+
 It installs Docker, writes `.env` with random secrets, builds the images and starts:
 
 | Address | What |
@@ -20,5 +22,5 @@ at the server, set `DOMAIN=` in `.env`, and run `install.sh` again (the till pai
 
 - Set `ANTHROPIC_API_KEY` in `.env` to read supplier invoices; without it invoices show as not read.
 - Data lives in Docker volumes `pgdata` (database) and `files` (invoice uploads). Back them up daily:
-  `docker compose -f deploy/docker-compose.yml exec db pg_dump -U postgres retail | gzip > backup.sql.gz`
+  `docker compose -f docker-compose.prod.yml exec db pg_dump -U postgres retail | gzip > backup.sql.gz`
 - Update: `git pull && sudo ./deploy/install.sh`.

@@ -30,7 +30,7 @@ fi
 
 if command -v ufw >/dev/null 2>&1; then ufw allow 22/tcp >/dev/null; ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null; fi
 
-docker compose --env-file .env -f deploy/docker-compose.yml up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 set -a; . ./.env; set +a
 echo
 echo "TillMate is starting. In a minute open:"
